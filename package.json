@@ -1,0 +1,21 @@
+{
+  "name": "@dzenlotus/promptery",
+  "version": "0.0.1",
+  "description": "Kanban-based context management for AI agents via MCP",
+  "keywords": ["mcp", "ai-agents", "kanban", "prompt-management", "claude", "cursor", "context-management"],
+  "license": "UNLICENSED",
+  "bin": {
+    "promptery": "./bin/cli.js"
+  },
+  "files": ["bin", "README.md", "LICENSE"],
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dzenlotus/promptery.git"
+  },
+  "homepage": "https://github.com/dzenlotus/promptery",
+  "author": "dzenlotus",
+  "private": false
+}
