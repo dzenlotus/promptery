@@ -1,0 +1,253 @@
+@import "tailwindcss";
+@import "@fontsource-variable/nunito";
+
+/*
+ * Design tokens — lean, single-source palette.
+ *
+ * Surface ladder:  bg → surface → surface-raised  (3 steps, warm near-black)
+ * Border ladder:   border → border-strong         (2 steps, white alphas)
+ * Text ladder:     text → text-muted → text-subtle (3 steps, readable hierarchy)
+ * State overlays:  hover-overlay, active-overlay, accent-soft  (uniform across all interactives)
+ * Accent:          SF blue, one hex + ring alpha — used everywhere primary action is meant
+ * Semantic:        danger, success (dual-purpose tokens with *-soft fills)
+ *
+ * Every interactive in the app draws its hover/active/focus from this ladder,
+ * so buttons / rows / menu items / inputs feel like members of the same family.
+ */
+@theme {
+  /* Surface ladder — warm near-black with subtle brown undertone. */
+  --color-bg: #17140f;
+  --color-surface: #1f1c17;
+  --color-surface-raised: #28241e;
+
+  /* Borders. */
+  --color-border: rgba(255, 255, 255, 0.08);
+  --color-border-strong: rgba(255, 255, 255, 0.14);
+
+  /* Text hierarchy. */
+  --color-text: #ece8e2;
+  --color-text-muted: #7a746a;
+  --color-text-subtle: #544e46;
+
+  /* Accent — single SF blue, one family. */
+  --color-accent: #0a84ff;
+  --color-accent-hover: #3a9bff;
+  --color-accent-active: #0071e3;
+  --color-accent-soft: rgba(10, 132, 255, 0.12);
+  --color-accent-ring: rgba(10, 132, 255, 0.28);
+
+  /* Semantic. */
+  --color-danger: #ff453a;
+  --color-danger-hover: #ff6a61;
+  --color-danger-soft: rgba(255, 69, 58, 0.12);
+  --color-success: #32d74b;
+
+  /* State overlays — used uniformly across ghost buttons, rows, menu items. */
+  --hover-overlay: rgba(255, 255, 255, 0.05);
+  --active-overlay: rgba(255, 255, 255, 0.09);
+
+  /* Typography. */
+  --font-sans: "Nunito Variable", -apple-system, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Radii. */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+  --radius-2xl: 28px;
+
+  /* Shadows. */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 20px 40px rgba(0, 0, 0, 0.5);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-weight: 400;
+  font-feature-settings: "calt", "liga";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow: hidden;
+}
+
+/*
+ * These go inside `@layer base` so Tailwind v4's utility classes (which live
+ * in `@layer utilities`) override them. Unlayered rules win against any
+ * layered rule regardless of specificity, which was silently forcing icons
+ * inside <button> to inherit their parent's colour instead of honouring the
+ * `text-[var(--color-text-subtle)]` utility we meant to apply.
+ */
+@layer base {
+  button,
+  input,
+  textarea {
+    font-family: inherit;
+    font-size: inherit;
+  }
+  button {
+    cursor: pointer;
+  }
+}
+
+/* Gradient hairline for raised panels and modals. */
+.gradient-border {
+  position: relative;
+}
+.gradient-border::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.16) 0%,
+    rgba(255, 255, 255, 0.05) 40%,
+    rgba(255, 255, 255, 0.02) 60%,
+    rgba(255, 255, 255, 0.09) 100%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* Solid 1px border for sub-panels (kanban columns etc). */
+.solid-border {
+  border: 1px solid var(--color-border-strong);
+}
+
+/* Glass fills — aligned with the surface ladder so there's no colour drift. */
+.liquid-glass {
+  background: rgba(40, 36, 30, 0.6);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+}
+.liquid-glass-strong {
+  background: rgba(31, 28, 23, 0.85);
+  backdrop-filter: blur(40px) saturate(170%);
+  -webkit-backdrop-filter: blur(40px) saturate(170%);
+}
+
+.scroll-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scroll-hidden::-webkit-scrollbar {
+  display: none;
+}
+
+.scroll-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+.scroll-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-accent-ring);
+  border-radius: var(--radius-sm);
+}
+
+/* Milkdown apple-themed overrides — input shares the surface-raised fill. */
+.milkdown {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  min-height: 240px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.65;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+.milkdown:focus-within {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px var(--color-accent-ring);
+}
+.milkdown .ProseMirror {
+  outline: none;
+  box-shadow: none;
+  min-height: 240px;
+}
+.milkdown .ProseMirror:focus,
+.milkdown .ProseMirror:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.milkdown h1,
+.milkdown h2,
+.milkdown h3 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-top: 1.2em;
+  margin-bottom: 0.4em;
+}
+.milkdown h1 {
+  font-size: 22px;
+}
+.milkdown h2 {
+  font-size: 18px;
+}
+.milkdown h3 {
+  font-size: 16px;
+}
+.milkdown p {
+  margin: 0.5em 0;
+}
+.milkdown code {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.milkdown pre {
+  background: rgba(0, 0, 0, 0.35);
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.milkdown blockquote {
+  border-left: 2px solid var(--color-text-subtle);
+  padding-left: 14px;
+  color: var(--color-text-muted);
+  margin-left: 0;
+}
+.milkdown ul,
+.milkdown ol {
+  padding-left: 22px;
+}
+.milkdown a {
+  color: var(--color-accent);
+  text-decoration: none;
+}
+.milkdown a:hover {
+  text-decoration: underline;
+}
+
+.dnd-overlay {
+  transform: rotate(2deg);
+  opacity: 0.95;
+}
