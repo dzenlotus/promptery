@@ -23,13 +23,16 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=18.0.0"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/dzenlotus/promptery.git"
   },
-  "homepage": "https://github.com/dzenlotus/promptery",
+  "bugs": {
+    "url": "https://github.com/dzenlotus/promptery/issues"
+  },
+  "homepage": "https://github.com/dzenlotus/promptery#readme",
   "author": "dzenlotus",
   "private": false,
   "scripts": {
