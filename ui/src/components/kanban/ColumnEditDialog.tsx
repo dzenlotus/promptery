@@ -8,6 +8,7 @@ import { RoleSelector } from "../tasks/RoleSelector.js";
 import { PromptsMultiSelector } from "../common/PromptsMultiSelector.js";
 import { useRoles } from "../../hooks/useRoles.js";
 import { usePrompts } from "../../hooks/usePrompts.js";
+import { usePromptGroups } from "../../hooks/usePromptGroups.js";
 import { api } from "../../lib/api.js";
 import { qk } from "../../lib/query.js";
 
@@ -27,6 +28,7 @@ export function ColumnEditDialog({ columnId, boardId, open, onOpenChange }: Prop
   const qc = useQueryClient();
   const { data: roles = [] } = useRoles();
   const { data: allPrompts = [] } = usePrompts();
+  const { data: groups = [] } = usePromptGroups();
 
   const { data: column } = useQuery({
     queryKey: qk.column(columnId),
@@ -132,6 +134,7 @@ export function ColumnEditDialog({ columnId, boardId, open, onOpenChange }: Prop
           </label>
           <PromptsMultiSelector
             allPrompts={allPrompts}
+            allGroups={groups}
             value={promptIds}
             onChange={setPromptIds}
             testId="column-edit-prompts"

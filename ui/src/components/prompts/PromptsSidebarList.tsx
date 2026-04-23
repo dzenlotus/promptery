@@ -7,6 +7,7 @@ import { SidebarSection } from "../../layout/SidebarSection.js";
 import { PromptGroupsList } from "./PromptGroupsList.js";
 import { PromptGroupDialog } from "./PromptGroupDialog.js";
 import { PromptGroupDeleteDialog } from "./PromptGroupDeleteDialog.js";
+import { DraggablePromptRow } from "./DraggablePromptRow.js";
 import type { Prompt, PromptGroup } from "../../lib/types.js";
 
 interface Props {
@@ -25,6 +26,9 @@ interface Props {
   onColorPick: (id: string, color: string) => void;
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
+  /** When true, each prompt row is wrapped with @dnd-kit's useDraggable.
+   *  Must be rendered inside a DndContext — caller is responsible. */
+  draggable?: boolean;
 }
 
 export function PromptsSidebarList({
@@ -43,6 +47,7 @@ export function PromptsSidebarList({
   onColorPick,
   onDuplicate,
   onDelete,
+  draggable = false,
 }: Props) {
   // Dialog state is hoisted here so the sidebar owns the "groups" sub-section
   // end-to-end. Pushing it further up into PromptsView would force that view
@@ -104,22 +109,31 @@ export function PromptsSidebarList({
                 testId="prompts-draft-row"
               />
             )}
-            {prompts.map((p) => (
-              <EntityRow
-                key={p.id}
-                item={p}
-                selected={selectedId === p.id}
-                isRenaming={renamingId === p.id}
-                onSelect={() => onSelect(p.id)}
-                onRequestRename={() => onRequestRename(p.id)}
-                commitRename={(n) => onCommitRename(p.id, n)}
-                cancelRename={onCancelRename}
-                onColorPick={(c) => onColorPick(p.id, c)}
-                onDuplicate={() => onDuplicate(p.id)}
-                onDelete={() => onDelete(p.id)}
-                testIdPrefix="prompt-row"
-              />
-            ))}
+            {prompts.map((p) => {
+              const row = (
+                <EntityRow
+                  key={p.id}
+                  item={p}
+                  selected={selectedId === p.id}
+                  isRenaming={renamingId === p.id}
+                  onSelect={() => onSelect(p.id)}
+                  onRequestRename={() => onRequestRename(p.id)}
+                  commitRename={(n) => onCommitRename(p.id, n)}
+                  cancelRename={onCancelRename}
+                  onColorPick={(c) => onColorPick(p.id, c)}
+                  onDuplicate={() => onDuplicate(p.id)}
+                  onDelete={() => onDelete(p.id)}
+                  testIdPrefix="prompt-row"
+                />
+              );
+              return draggable ? (
+                <DraggablePromptRow key={p.id} promptId={p.id}>
+                  {row}
+                </DraggablePromptRow>
+              ) : (
+                row
+              );
+            })}
           </>
         )}
       </div>

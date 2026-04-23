@@ -263,11 +263,22 @@ export function TaskDialog(props: Props) {
           <MilkdownEditor key={editorKey} value={description} onChange={setDescription} />
         </Field>
 
-        {mode === "edit" && editingId && (
-          <Field label="Effective context">
-            <TaskEffectiveContext taskId={editingId} />
-          </Field>
-        )}
+        {/* Live preview of the inheritance stack. Visible in both modes —
+            in create mode it shows what the task would pick up if saved in
+            the current column. Wired to the staged local state so adding or
+            removing a direct prompt (or switching role) updates the view
+            without a save round trip. */}
+        <Field label="Effective context">
+          <TaskEffectiveContext
+            boardId={boardId}
+            columnId={
+              mode === "create" ? props.columnId : editTask?.column_id ?? ""
+            }
+            localRoleId={localRoleId}
+            localDirectIds={localDirectIds}
+            allPrompts={allPrompts}
+          />
+        </Field>
       </div>
     </Dialog>
   );

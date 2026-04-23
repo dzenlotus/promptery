@@ -8,6 +8,7 @@ import { RoleSelector } from "../tasks/RoleSelector.js";
 import { PromptsMultiSelector } from "../common/PromptsMultiSelector.js";
 import { useRoles } from "../../hooks/useRoles.js";
 import { usePrompts } from "../../hooks/usePrompts.js";
+import { usePromptGroups } from "../../hooks/usePromptGroups.js";
 import { api } from "../../lib/api.js";
 import { qk } from "../../lib/query.js";
 
@@ -27,6 +28,7 @@ export function BoardEditDialog({ boardId, open, onOpenChange }: Props) {
   const qc = useQueryClient();
   const { data: roles = [] } = useRoles();
   const { data: allPrompts = [] } = usePrompts();
+  const { data: groups = [] } = usePromptGroups();
 
   const { data: board } = useQuery({
     queryKey: qk.board(boardId),
@@ -137,6 +139,7 @@ export function BoardEditDialog({ boardId, open, onOpenChange }: Props) {
           </div>
           <PromptsMultiSelector
             allPrompts={allPrompts}
+            allGroups={groups}
             value={promptIds}
             onChange={setPromptIds}
             testId="board-edit-prompts"

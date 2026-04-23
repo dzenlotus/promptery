@@ -25,8 +25,13 @@ function Routed() {
       <Route path="/" component={HomeRedirect} />
       <Route path="/board/:id" component={KanbanView} />
       <Route path="/roles" component={RolesView} />
-      <Route path="/prompts" component={PromptsView} />
+      {/* Group detail pattern is more specific — wouter Switch picks it
+          first for two-segment URLs. Optional `:id?` below covers both
+          /prompts (no id) and /prompts/<id> (selected prompt) in the SAME
+          mounted component, so clicking a prompt just toggles a route
+          param instead of remounting PromptsView (and losing local state). */}
       <Route path="/prompts/groups/:id" component={PromptGroupView} />
+      <Route path="/prompts/:id?" component={PromptsView} />
       <Route path="/skills" component={SkillsView} />
       <Route path="/mcp" component={McpToolsView} />
       <Route path="/settings" component={SettingsRedirect} />

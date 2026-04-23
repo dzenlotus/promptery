@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useRole } from "../../hooks/useRoles.js";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Plus } from "lucide-react";
@@ -7,7 +8,8 @@ import type { Column, Task } from "../../lib/types.js";
 import { api } from "../../lib/api.js";
 import { qk } from "../../lib/query.js";
 import { IconButton } from "../ui/IconButton.js";
-import { Chip } from "../ui/Chip.js";
+import { AttachmentChipRow } from "../common/AttachmentChipRow.js";
+import { usePromptGroups } from "../../hooks/usePromptGroups.js";
 import { TaskCard } from "./TaskCard.js";
 import { TaskDialog } from "../tasks/TaskDialog.js";
 import { ColumnContextMenu } from "./ColumnContextMenu.js";
@@ -43,7 +45,16 @@ export function KanbanColumn({ boardId, column, tasks }: Props) {
   });
 
   const role = detail?.role ?? null;
-  const prompts = detail?.prompts ?? [];
+  // Hide direct column prompts the column-role already provides (the role
+  // chip above implies them) and collapse fully-covered groups into a
+  // group chip via AttachmentChipRow below.
+  const { data: roleDetail } = useRole(role?.id ?? null);
+  const rolePromptIds = useMemo(
+    () => new Set((roleDetail?.prompts ?? []).map((p) => p.id)),
+    [roleDetail]
+  );
+  const directPrompts = detail?.prompts ?? [];
+  const { data: allGroups = [] } = usePromptGroups();
 
   return (
     <div
@@ -91,16 +102,12 @@ export function KanbanColumn({ boardId, column, tasks }: Props) {
           </div>
         </div>
 
-        {prompts.length > 0 && (
-          <div
-            data-testid={`column-prompt-chips-${column.id}`}
-            className="flex flex-wrap gap-1"
-          >
-            {prompts.map((p) => (
-              <Chip key={p.id} name={p.name} color={p.color} size="sm" />
-            ))}
-          </div>
-        )}
+        <AttachmentChipRow
+          prompts={directPrompts}
+          allGroups={allGroups}
+          hiddenPromptIds={rolePromptIds}
+          testId={`column-prompt-chips-${column.id}`}
+        />
       </div>
 
       <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>

@@ -6,6 +6,7 @@ import { MoreHorizontal, Settings2, Trash2 } from "lucide-react";
 import { useBoards } from "../hooks/useBoards.js";
 import { useColumns } from "../hooks/useColumns.js";
 import { useTasks } from "../hooks/useTasks.js";
+import { useRole } from "../hooks/useRoles.js";
 import { ROUTES } from "../lib/routes.js";
 import { api } from "../lib/api.js";
 import { qk } from "../lib/query.js";
@@ -13,7 +14,8 @@ import { KanbanBoard } from "../components/kanban/KanbanBoard.js";
 import { BoardsList } from "../components/boards/BoardsList.js";
 import { BoardEditDialog } from "../components/boards/BoardEditDialog.js";
 import { BoardDeleteDialog } from "../components/boards/BoardDeleteDialog.js";
-import { Chip } from "../components/ui/Chip.js";
+import { AttachmentChipRow } from "../components/common/AttachmentChipRow.js";
+import { usePromptGroups } from "../hooks/usePromptGroups.js";
 import {
   DropdownContent,
   DropdownItem,
@@ -44,6 +46,19 @@ export function KanbanView() {
 
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+
+  // Pull the active role's prompts so we can hide direct board prompts that
+  // are already provided via the role — the role badge next to the title
+  // already implies them.
+  const { data: roleDetail } = useRole(detail?.role_id ?? null);
+  const rolePromptIds = useMemo(
+    () => new Set((roleDetail?.prompts ?? []).map((p) => p.id)),
+    [roleDetail]
+  );
+  // AttachmentChipRow also collapses fully-covered groups into a group chip
+  // so "I added a group to this board" reads as a single chip, not N loose
+  // prompts.
+  const { data: allGroups = [] } = usePromptGroups();
 
   useEffect(() => {
     if (!boardsLoading && boardId && boards.length > 0 && !board) {
@@ -121,16 +136,12 @@ export function KanbanView() {
           </div>
         </div>
 
-        {detail?.prompts && detail.prompts.length > 0 && (
-          <div
-            data-testid="board-prompt-chips"
-            className="flex flex-wrap gap-1.5"
-          >
-            {detail.prompts.map((p) => (
-              <Chip key={p.id} name={p.name} color={p.color} size="sm" />
-            ))}
-          </div>
-        )}
+        <AttachmentChipRow
+          prompts={detail?.prompts ?? []}
+          allGroups={allGroups}
+          hiddenPromptIds={rolePromptIds}
+          testId="board-prompt-chips"
+        />
       </header>
 
       {colLoading || taskLoading ? (

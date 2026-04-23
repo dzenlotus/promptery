@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useRoute } from "wouter";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { FileText } from "lucide-react";
@@ -37,10 +38,35 @@ export function PromptsView() {
     [allPrompts]
   );
 
-  const [selection, setSelection] = useState<Selection>({ kind: "none" });
+  // Route-driven selection — /prompts/:id preselects that prompt, /prompts
+  // clears. This gives us shareable URLs (the group-detail page navigates
+  // here with /prompts/<id>) and survives refresh.
+  // Single optional-param route (`/prompts/:id?`) so the component stays
+  // mounted whether the user is on /prompts or /prompts/<id>. Without this
+  // the plain /prompts route and the /prompts/:id route mounted separate
+  // instances and selection flickered / local state was lost.
+  const [, setLocation] = useLocation();
+  const [matched, routeParams] = useRoute<{ id?: string }>("/prompts/:id?");
+  const routeId = matched ? routeParams?.id ?? null : null;
+
+  const [selection, setSelection] = useState<Selection>(
+    routeId ? { kind: "saved", id: routeId } : { kind: "none" }
+  );
   const [hasDraft, setHasDraft] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Prompt | null>(null);
+
+  // URL is the source of truth: whenever the route id changes (direct
+  // navigation, back/forward, deep link), reconcile local selection. We
+  // don't clear selection when routeId becomes null because `/prompts`
+  // (no id) is a legitimate "nothing selected" state.
+  useEffect(() => {
+    if (routeId) {
+      setSelection({ kind: "saved", id: routeId });
+    } else {
+      setSelection((prev) => (prev.kind === "saved" ? { kind: "none" } : prev));
+    }
+  }, [routeId]);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: qk.prompts });
 
@@ -78,12 +104,24 @@ export function PromptsView() {
     onError: (err: Error) => toastUnlessField(err, "Failed to delete prompt"),
   });
 
-  const handleCreateDraft = () => {
-    setHasDraft(true);
-    setSelection({ kind: "draft" });
+  // Navigating cleanly reflects the new selection in the URL so the
+  // address bar doesn't lie about which prompt is open.
+  const goToSelection = (next: Selection) => {
+    setSelection(next);
+    if (next.kind === "saved") {
+      setLocation(`/prompts/${next.id}`);
+    } else if (next.kind === "none") {
+      setLocation("/prompts");
+    }
+    // kind === "draft" stays on /prompts (no saved id yet).
   };
 
-  const handleSelect = (id: string) => setSelection({ kind: "saved", id });
+  const handleCreateDraft = () => {
+    setHasDraft(true);
+    goToSelection({ kind: "draft" });
+  };
+
+  const handleSelect = (id: string) => goToSelection({ kind: "saved", id });
 
   const handleRename = async (id: string, nextName: string) => {
     const trimmed = nextName.trim();
@@ -116,7 +154,7 @@ export function PromptsView() {
         content: current.content,
         color: current.color,
       });
-      setSelection({ kind: "saved", id: dup.id });
+      goToSelection({ kind: "saved", id: dup.id });
     } catch {
       /* toast */
     }
@@ -127,7 +165,7 @@ export function PromptsView() {
     try {
       await deleteMutation.mutateAsync(deleteTarget.id);
       if (selection.kind === "saved" && selection.id === deleteTarget.id) {
-        setSelection({ kind: "none" });
+        goToSelection({ kind: "none" });
       }
       setDeleteTarget(null);
     } catch {
@@ -147,7 +185,7 @@ export function PromptsView() {
           onUpdate={(id, patch) => updateMutation.mutateAsync({ id, patch })}
           onCreatedDraft={(p) => {
             setHasDraft(false);
-            setSelection({ kind: "saved", id: p.id });
+            goToSelection({ kind: "saved", id: p.id });
           }}
         />
       );
@@ -190,7 +228,7 @@ export function PromptsView() {
             draftIsSelected={selection.kind === "draft"}
             renamingId={renamingId}
             onSelect={handleSelect}
-            onSelectDraft={() => setSelection({ kind: "draft" })}
+            onSelectDraft={() => goToSelection({ kind: "draft" })}
             onCreateDraft={handleCreateDraft}
             onRequestRename={setRenamingId}
             onCommitRename={handleRename}

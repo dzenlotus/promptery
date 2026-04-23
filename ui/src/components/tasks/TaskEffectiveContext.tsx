@@ -1,128 +1,327 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Check, Folder, X } from "lucide-react";
 import { api } from "../../lib/api.js";
 import { qk } from "../../lib/query.js";
-import { PromptOriginBadge } from "../common/PromptOriginBadge.js";
-import { RoleSourceBadge } from "../common/RoleSourceBadge.js";
+import { useRole } from "../../hooks/useRoles.js";
+import type { Prompt } from "../../lib/types.js";
+import { cn } from "../../lib/cn.js";
+import {
+  buildLayeredInheritance,
+  type LayerId,
+  type LayerPromptEntry,
+  type PreparedLayer,
+} from "./inheritancePreview.js";
 
 interface Props {
-  taskId: string;
+  boardId: string;
+  columnId: string;
+  /** Staged (not yet saved) task role — drives live preview. */
+  localRoleId: string | null;
+  /** Staged direct-prompt ids on the task. */
+  localDirectIds: string[];
+  /** Prompt catalogue, used for name / colour / content lookup. */
+  allPrompts: Prompt[];
 }
 
+const LAYER_TITLE: Record<LayerId, string> = {
+  board: "Board context",
+  column: "Column context",
+  task: "Task context",
+};
+
 /**
- * Read-only view of the task's resolved context — what the agent will
- * actually receive when it calls get_task_bundle. Shows the active role
- * with its inheritance source and the deduplicated prompt union from all
- * six origins (direct, role, column, column-role, board, board-role).
+ * Live, layered view of everything that flows into a task's resolved
+ * context. Rendered as three stacked cards (Board → Column → Task) where
+ * each entry carries a ✓/✗ marker telling the user whether it actually
+ * makes it into the final agent payload or gets shadowed by a stronger
+ * (more specific) layer.
  *
- * Lives inside TaskDialog next to the editable role/prompts surface so the
- * user can compare their direct edits with the final composite that
- * inheritance produces.
+ * All inputs (including local draft state from TaskDialog) are wired in,
+ * so adding or removing a direct prompt — or switching the task role —
+ * updates the view immediately without a save round trip.
  */
-export function TaskEffectiveContext({ taskId }: Props) {
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: qk.taskContext(taskId),
-    queryFn: () => api.tasks.context(taskId),
+export function TaskEffectiveContext({
+  boardId,
+  columnId,
+  localRoleId,
+  localDirectIds,
+  allPrompts,
+}: Props) {
+  const promptById = useMemo(
+    () => new Map(allPrompts.map((p) => [p.id, p])),
+    [allPrompts]
+  );
+
+  const { data: board } = useQuery({
+    queryKey: qk.board(boardId),
+    queryFn: () => api.boards.get(boardId),
+  });
+  const { data: column } = useQuery({
+    queryKey: qk.column(columnId),
+    queryFn: () => api.columns.get(columnId),
   });
 
-  if (isLoading) {
+  // Role details — each is skipped cleanly when the id is null.
+  const taskRoleQ = useRole(localRoleId);
+  const columnRoleQ = useRole(column?.role_id ?? null);
+  const boardRoleQ = useRole(board?.role_id ?? null);
+
+  const layers = useMemo<PreparedLayer[]>(
+    () =>
+      buildLayeredInheritance({
+        localRoleId,
+        localDirectIds,
+        taskRoleDetail: taskRoleQ.data ?? null,
+        column: {
+          role: column?.role ?? null,
+          prompts: column?.prompts ?? [],
+          roleDetail: columnRoleQ.data ?? null,
+        },
+        board: {
+          role: board?.role ?? null,
+          prompts: board?.prompts ?? [],
+          roleDetail: boardRoleQ.data ?? null,
+        },
+      }),
+    [
+      localRoleId,
+      localDirectIds,
+      taskRoleQ.data,
+      column?.role,
+      column?.prompts,
+      columnRoleQ.data,
+      board?.role,
+      board?.prompts,
+      boardRoleQ.data,
+    ]
+  );
+
+  const anyContent = layers.some(
+    (l) => l.layerRole !== null || l.entries.length > 0
+  );
+
+  if (!anyContent) {
     return (
       <div
         data-testid="task-effective-context"
-        data-state="loading"
-        className="text-[12px] text-[var(--color-text-subtle)] px-3 py-2"
+        data-state="empty"
+        className="text-[12px] text-[var(--color-text-subtle)] px-3 py-2 rounded-md border border-dashed border-[var(--color-border)]"
       >
-        Resolving context…
+        No role or prompts set anywhere on this task, its column, or its board.
       </div>
     );
   }
 
-  if (isError) {
-    return (
-      <div
-        data-testid="task-effective-context"
-        data-state="error"
-        className="text-[12px] text-[var(--color-danger)] px-3 py-2"
-      >
-        {error instanceof Error ? error.message : "Failed to resolve context"}
-      </div>
-    );
-  }
-
-  if (!data) return null;
-
-  const promptCount = data.prompts.length;
-
+  // Weakest on top, strongest on bottom — that matches how the user
+  // thinks: "global defaults first, this task last". Empty layers
+  // collapse to nothing so the card never shows a bare header.
   return (
     <div data-testid="task-effective-context" className="grid gap-3">
-      {data.role ? (
-        <div className="grid gap-1.5 rounded-md border border-[var(--color-border)] bg-[var(--hover-overlay)] px-3 py-2">
-          <div className="text-[10px] uppercase tracking-[0.1em] text-[var(--color-text-subtle)]">
-            Active role
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            <span
-              aria-hidden
-              className="h-2 w-2 rounded-full"
-              style={{ backgroundColor: data.role.color || "#7a746a" }}
-            />
-            <span className="text-[13px] font-medium tracking-tight">
-              {data.role.name}
-            </span>
-            <RoleSourceBadge source={data.role.source} />
-          </div>
-        </div>
-      ) : (
-        <div className="text-[12px] text-[var(--color-text-subtle)] px-3 py-2 rounded-md border border-dashed border-[var(--color-border)]">
-          No role set anywhere on this task, its column, or its board.
-        </div>
+      {layers.map((layer) => {
+        if (layer.layerRole === null && layer.entries.length === 0) return null;
+        return (
+          <LayerCard
+            key={layer.layerId}
+            layer={layer}
+            promptById={promptById}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function LayerCard({
+  layer,
+  promptById,
+}: {
+  layer: PreparedLayer;
+  promptById: Map<string, Prompt>;
+}) {
+  const hasRole = !!layer.layerRole;
+  const hasPrompts = layer.entries.length > 0;
+
+  return (
+    <section
+      data-testid={`inheritance-layer-${layer.layerId}`}
+      className="rounded-md border border-[var(--color-border)] bg-[var(--hover-overlay)] px-3 py-2 grid gap-2.5"
+    >
+      <header className="flex items-center justify-between">
+        <span className="text-[10px] uppercase tracking-[0.1em] text-[var(--color-text-subtle)]">
+          {LAYER_TITLE[layer.layerId]}
+        </span>
+        {layer.layerId === "task" && (
+          <span className="text-[10px] text-[var(--color-text-subtle)]">
+            strongest
+          </span>
+        )}
+        {layer.layerId === "board" && (
+          <span className="text-[10px] text-[var(--color-text-subtle)]">
+            global defaults
+          </span>
+        )}
+      </header>
+
+      {hasRole && layer.layerRole && (
+        <LayerSection label="Role">
+          <Row
+            applied={layer.roleApplied}
+            name={layer.layerRole.name}
+            colorDot={layer.layerRole.color}
+            testId={`inheritance-${layer.layerId}-role-${layer.layerRole.id}`}
+            tooltip={
+              layer.roleApplied
+                ? "Active role at this layer"
+                : "Overridden by a stronger layer's role"
+            }
+          />
+        </LayerSection>
       )}
 
-      <div className="grid gap-1.5">
-        <div className="flex items-baseline justify-between">
-          <div className="text-[10px] uppercase tracking-[0.1em] text-[var(--color-text-subtle)]">
-            Prompts ({promptCount})
-          </div>
-          <span className="text-[10px] text-[var(--color-text-subtle)]">
-            union from 6 origins · dedup by most specific
-          </span>
-        </div>
-
-        {promptCount === 0 ? (
-          <div className="text-[12px] text-[var(--color-text-subtle)] px-3 py-2 rounded-md border border-dashed border-[var(--color-border)]">
-            No prompts will reach the agent. Attach one directly, set a role,
-            or configure column/board defaults.
-          </div>
-        ) : (
-          <ul className="grid gap-1.5">
-            {data.prompts.map((p) => (
-              <li
-                key={p.id}
-                data-testid={`effective-prompt-${p.id}`}
-                className="flex items-start gap-2 rounded-md border border-[var(--color-border)] bg-[var(--hover-overlay)] px-3 py-2"
-              >
-                <span
-                  aria-hidden
-                  className="h-2 w-2 rounded-full shrink-0 mt-[5px]"
-                  style={{ backgroundColor: p.color || "#7a746a" }}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[13px] font-medium tracking-tight truncate">
-                      {p.name}
-                    </span>
-                    <PromptOriginBadge origin={p.origin} sourceName={p.source?.name} />
-                  </div>
-                  {p.content.trim().length > 0 && (
-                    <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5 line-clamp-2 whitespace-pre-wrap">
-                      {p.content}
-                    </p>
-                  )}
-                </div>
-              </li>
+      {hasPrompts && (
+        <LayerSection label="Prompts">
+          <ul className="grid gap-1">
+            {layer.entries.map((entry) => (
+              <PromptRow
+                key={entry.promptId}
+                layerId={layer.layerId}
+                entry={entry}
+                prompt={promptById.get(entry.promptId)}
+              />
             ))}
           </ul>
-        )}
+        </LayerSection>
+      )}
+
+      {!hasRole && !hasPrompts && (
+        <div className="text-[11px] text-[var(--color-text-subtle)] pl-1">
+          No role or prompts at this layer.
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** Section wrapper used inside a LayerCard — renders the subsection label
+ *  (Role / Prompts / later Skills / MCP) above a hairline divider. */
+function LayerSection({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="grid gap-1.5">
+      <div className="flex items-center gap-2">
+        <span className="text-[10px] uppercase tracking-[0.1em] text-[var(--color-text-subtle)]">
+          {label}
+        </span>
+        <span aria-hidden className="h-px flex-1 bg-[var(--color-border)]" />
       </div>
+      {children}
     </div>
+  );
+}
+
+function PromptRow({
+  layerId,
+  entry,
+  prompt,
+}: {
+  layerId: LayerId;
+  entry: LayerPromptEntry;
+  prompt: Prompt | undefined;
+}) {
+  const name = prompt?.name ?? entry.promptId;
+  const tooltip = !entry.applied
+    ? "Shadowed by a stronger layer"
+    : entry.origin === "role" && entry.role
+      ? `from role: ${entry.role.name}`
+      : "direct";
+
+  return (
+    <li
+      data-testid={`inheritance-${layerId}-${entry.promptId}`}
+      data-applied={entry.applied}
+    >
+      <Row
+        applied={entry.applied}
+        name={name}
+        colorDot={prompt?.color ?? null}
+        tooltip={tooltip}
+        suffix={
+          entry.origin === "role" && entry.role ? (
+            <span
+              className="inline-flex items-center gap-1 text-[10px] text-[var(--color-text-subtle)] tracking-tight"
+              title={`Inherited from role "${entry.role.name}"`}
+            >
+              <Folder size={9} style={{ color: entry.role.color || "#7a746a" }} />
+              {entry.role.name}
+            </span>
+          ) : null
+        }
+      />
+    </li>
+  );
+}
+
+/** One line: status dot + colour swatch + name (+ optional suffix). */
+function Row({
+  applied,
+  name,
+  colorDot,
+  suffix,
+  testId,
+  tooltip,
+}: {
+  applied: boolean;
+  name: string;
+  colorDot: string | null;
+  suffix?: React.ReactNode;
+  testId?: string;
+  tooltip?: string;
+}) {
+  return (
+    <div className="flex items-center gap-2" data-testid={testId}>
+      <StatusDot applied={applied} />
+      {colorDot !== null && (
+        <span
+          aria-hidden
+          className="h-1.5 w-1.5 rounded-full shrink-0"
+          style={{ backgroundColor: colorDot || "#7a746a" }}
+        />
+      )}
+      <span
+        className={cn(
+          "text-[12px] truncate",
+          applied
+            ? "text-[var(--color-text)]"
+            : "line-through text-[var(--color-text-muted)]"
+        )}
+        title={tooltip}
+      >
+        {name}
+      </span>
+      {suffix}
+    </div>
+  );
+}
+
+function StatusDot({ applied }: { applied: boolean }) {
+  return (
+    <span
+      aria-label={applied ? "applied" : "shadowed"}
+      data-applied={applied}
+      className={cn(
+        "inline-flex items-center justify-center h-4 w-4 rounded-full shrink-0",
+        applied
+          ? "bg-[color-mix(in_oklab,var(--color-success)_20%,transparent)] text-[var(--color-success)]"
+          : "bg-[var(--color-danger-soft)] text-[var(--color-danger)]"
+      )}
+    >
+      {applied ? <Check size={10} strokeWidth={3} /> : <X size={10} strokeWidth={3} />}
+    </span>
   );
 }

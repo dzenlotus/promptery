@@ -103,6 +103,10 @@ export interface PromptGroup {
   created_at: number;
   updated_at: number;
   prompt_count: number;
+  /** Member prompt ids in group-position order. Every list/get response
+   *  includes this so the multi-select can compute "group fully covered"
+   *  without a second round trip. */
+  member_ids: string[];
 }
 
 export interface PromptInGroup {

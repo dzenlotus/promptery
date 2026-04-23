@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { useBoards } from "../../hooks/useBoards.js";
 import { useRoles } from "../../hooks/useRoles.js";
 import { usePrompts } from "../../hooks/usePrompts.js";
+import { usePromptGroups } from "../../hooks/usePromptGroups.js";
 import { ROUTES } from "../../lib/routes.js";
 import { BoardRow } from "./BoardRow.js";
 import { IconButton } from "../ui/IconButton.js";
@@ -22,6 +23,7 @@ export function BoardsList() {
   const { data: boards = [], isLoading } = useBoards();
   const { data: roles = [] } = useRoles();
   const { data: allPrompts = [] } = usePrompts();
+  const { data: groups = [] } = usePromptGroups();
   const [, setLocation] = useLocation();
   const [, params] = useRoute<{ id: string }>("/board/:id");
   const activeId = params?.id;
@@ -156,6 +158,7 @@ export function BoardsList() {
             </label>
             <PromptsMultiSelector
               allPrompts={allPrompts}
+              allGroups={groups}
               value={promptIds}
               onChange={setPromptIds}
               testId="board-create-prompts"

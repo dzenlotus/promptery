@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { MilkdownEditor } from "../editor/MilkdownEditor.js";
 import { Button } from "../ui/Button.js";
 import { HeaderColorPicker } from "../sidebar/HeaderColorPicker.js";
-import { EntitySelector } from "../common/EntitySelector.js";
+import { PromptsMultiSelector } from "../common/PromptsMultiSelector.js";
+import { usePromptGroups } from "../../hooks/usePromptGroups.js";
 import { DRAFT_COLOR } from "../sidebar/colors.js";
 import { cn } from "../../lib/cn.js";
 import { relativeTime } from "../../lib/time.js";
@@ -88,6 +89,9 @@ export function RoleEditor({
 
   const [values, setValues] = useState<EditorValues>(initial);
   const [localPromptIds, setLocalPromptIds] = useState<string[]>(baselinePromptIds);
+  // Groups surface in the prompt picker as fully-covered chips / popover
+  // shortcuts — same semantics as the board/column selectors.
+  const { data: groups = [] } = usePromptGroups();
   const [saving, setSaving] = useState(false);
   const [hasTyped, setHasTyped] = useState(false);
   const [attemptedSave, setAttemptedSave] = useState(false);
@@ -123,18 +127,6 @@ export function RoleEditor({
     ((hasTyped || attemptedSave) && localNameError ? localNameError : null);
 
   const canSave = !saving && !localNameError && (isDraft || isDirty);
-
-  const handleAddPrompt = (id: string) => {
-    const next = [...localPromptIds, id];
-    setLocalPromptIds(next);
-    if (isDraft) onDraftPromptsChange?.(next);
-  };
-
-  const handleRemovePrompt = (id: string) => {
-    const next = localPromptIds.filter((x) => x !== id);
-    setLocalPromptIds(next);
-    if (isDraft) onDraftPromptsChange?.(next);
-  };
 
   const handleReorderPrompts = (nextIds: string[]) => {
     setLocalPromptIds(nextIds);
@@ -245,15 +237,14 @@ export function RoleEditor({
       <div className="min-h-0 min-w-0 overflow-y-auto scroll-thin px-8 py-6">
         <div className="grid gap-6">
           <div className="grid gap-1.5">
-            <EntitySelector
-              label="Default prompts"
-              entities={allPrompts}
-              selectedIds={localPromptIds}
-              onAdd={handleAddPrompt}
-              onRemove={handleRemovePrompt}
-              onReorder={handleReorderPrompts}
-              addButtonLabel="Add prompt"
-              emptyHint="No prompts available — create one in the Prompts view."
+            <span className="text-[10px] uppercase tracking-[0.1em] font-medium text-[var(--color-text-subtle)]">
+              Default prompts
+            </span>
+            <PromptsMultiSelector
+              allPrompts={allPrompts}
+              allGroups={groups}
+              value={localPromptIds}
+              onChange={handleReorderPrompts}
               testId="role-default-prompts"
             />
             <p className="text-[11px] text-[var(--color-text-subtle)]">
@@ -277,19 +268,21 @@ export function RoleEditor({
         </div>
       </div>
 
-      <div className="grid grid-cols-[1fr_auto] items-center gap-3 px-8 py-3 border-t border-[var(--color-border)] bg-[var(--color-bg)]/60">
-        <span className="text-[11px] text-[var(--color-text-subtle)] tabular-nums">
-          {values.content.length} character{values.content.length === 1 ? "" : "s"}
-        </span>
-        <Button
-          variant="primary"
-          size="sm"
-          data-testid="role-editor-save"
-          onClick={() => void onSave()}
-          disabled={!canSave}
-        >
-          {saving ? "Saving…" : !isDraft && !isDirty ? "Saved ✓" : "Save"}
-        </Button>
+      <div className="px-6 pb-4 pt-2">
+        <div className="flex items-center justify-between gap-3 pl-4 pr-1.5 py-1.5 rounded-full border border-[var(--color-border)] bg-[var(--hover-overlay)] backdrop-blur-sm">
+          <span className="text-[11px] text-[var(--color-text-subtle)] tabular-nums">
+            {values.content.length} character{values.content.length === 1 ? "" : "s"}
+          </span>
+          <Button
+            variant="primary"
+            size="sm"
+            data-testid="role-editor-save"
+            onClick={() => void onSave()}
+            disabled={!canSave}
+          >
+            {saving ? "Saving…" : !isDraft && !isDirty ? "Saved ✓" : "Save"}
+          </Button>
+        </div>
       </div>
     </div>
   );

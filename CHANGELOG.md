@@ -65,6 +65,44 @@
 - Sidebar, task cards, dialogs and overlays now use translucent glass
   surfaces so the animated background is visible through the UI.
 
+**Prompt drag & drop**
+- Drag a prompt from the sidebar directly onto a Prompt Group page to
+  attach it. Reorder members inside a group by dragging within the page.
+- Drag preview renders via a portal-level `DragOverlay` clone, so the
+  floating chip is never clipped by the sidebar's overflow and keeps its
+  natural proportions while moving.
+
+**Effective context panel**
+- Task dialog shows three stacked cards — Board / Column / Task — with
+  per-section sub-labels (ROLE, PROMPTS) and ✓ / ✗ markers. Updates live
+  as you stage changes (switching the task role, adding or removing
+  direct prompts) with no save round-trip.
+- Role shadowing is id-aware: pointing multiple layers at the *same*
+  role id no longer reads as "overridden", it correctly shows both rows
+  as active. A weaker layer is only struck through when its role id
+  actually differs from the effective one.
+- Prompt rows always show as applied on every layer that lists them —
+  matching the backend's union semantics, so "this prompt comes from
+  board *and* task" reads as two green rows, not one green and one red.
+
+**Attachment chip row**
+- Board and column headers collapse a fully-covered prompt group into a
+  single group chip (with folder icon and member count) instead of
+  spamming one chip per member. Behaves identically in the task dialog,
+  column-edit dialog, and role editor's prompt picker.
+- Role editor's prompt picker now surfaces Groups as a first-class section
+  alongside individual prompts.
+
+**Editor polish**
+- Markdown textarea auto-grows with content; the surrounding pane owns
+  scrolling, so the editor never has its own internal scrollbar.
+- Editor footers (Role editor, Prompt editor) rebuilt as inset rounded-pill
+  containers with a translucent `hover-overlay` background, matching the
+  rest of the glass UI language.
+- Prompt selection is deep-linkable: `/prompts/:id?` and
+  `/prompts/groups/:id` share a single route host, so switching between
+  prompts or between a prompt and a group no longer remounts the view.
+
 **MCP tools — new in 0.2.0**
 - `set_board_role`, `set_board_prompts`, `get_board_prompts`
 - `set_column_role`, `set_column_prompts`, `get_column_prompts`
@@ -95,6 +133,19 @@
   user knows to re-run after switching Node versions.
 - Popovers and dropdowns no longer disappear behind the canvas — removed a
   redundant z-index layer that was shadowing Radix portals.
+- Prompt and Role editors no longer crash when opened. A defensive
+  accessor for the (sometimes missing) `member_ids` array was rewritten
+  as a direct property read — the earlier self-referential helper blew
+  the stack once any picker mounted.
+- Fully-covered prompt groups now collapse into a single group chip in
+  every surface (board header, column header, task dialog), not just in
+  the multi-select popover.
+- Effective context panel no longer marks the same prompt as shadowed at
+  multiple layers — prompts are unioned, not shadowed, at the backend, so
+  they should read as applied wherever they appear.
+- Drag-preview thumbnails keep their original size and shape while being
+  dragged — switched from in-place `transform` (which got clipped by the
+  sidebar's `overflow: hidden`) to a portal-rendered `DragOverlay`.
 
 ## 0.1.1 — 2026-04-23
 

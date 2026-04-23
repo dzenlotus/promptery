@@ -130,6 +130,19 @@ describe("prompt groups — many-to-many", () => {
     expect(counts).toEqual({ A: 2, B: 1, C: 0 });
   });
 
+  it("listPromptGroups carries member_ids in position order", () => {
+    const p1 = promptIdByName("p1");
+    const p2 = promptIdByName("p2");
+    const p3 = promptIdByName("p3");
+    createPromptGroup(db, { name: "Ordered", prompt_ids: [p3, p1, p2] });
+    createPromptGroup(db, { name: "Empty" });
+
+    const list = listPromptGroups(db);
+    const byName = Object.fromEntries(list.map((g) => [g.name, g.member_ids]));
+    expect(byName.Ordered).toEqual([p3, p1, p2]);
+    expect(byName.Empty).toEqual([]);
+  });
+
   it("updatePromptGroup patches the selected fields", () => {
     const g = createPromptGroup(db, { name: "orig", color: "#111111" });
     const updated = updatePromptGroup(db, g.id, { name: "renamed", color: null });

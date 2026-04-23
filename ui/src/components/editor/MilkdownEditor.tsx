@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { marked } from "marked";
 import hljs from "highlight.js/lib/common";
 import "highlight.js/styles/atom-one-dark.css";
@@ -181,6 +181,17 @@ function Toolbar({ onAction }: { onAction: (a: Action) => void }) {
 function EditMode({ value, onChange }: Props) {
   const taRef = useRef<HTMLTextAreaElement>(null);
 
+  // Auto-grow: the textarea's rendered height always tracks its content, so
+  // scrolling happens in the surrounding pane (which is `overflow-y-auto`)
+  // rather than inside the textarea itself. useLayoutEffect prevents a
+  // visible flash between "collapsed to min-height" and "grown to fit".
+  useLayoutEffect(() => {
+    const ta = taRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = `${ta.scrollHeight}px`;
+  }, [value]);
+
   const handle = (action: Action) => {
     const ta = taRef.current;
     if (!ta) return;
@@ -203,8 +214,9 @@ function EditMode({ value, onChange }: Props) {
         onChange={(e) => onChange(e.target.value)}
         placeholder="Write markdown here…"
         spellCheck={false}
+        rows={12}
         className={cn(
-          "w-full min-h-[260px] resize-none bg-transparent outline-none block",
+          "w-full resize-none bg-transparent outline-none block overflow-hidden",
           "p-4 font-mono text-[13px] leading-[1.55] text-[var(--color-text)]",
           "placeholder:text-[var(--color-text-subtle)]"
         )}

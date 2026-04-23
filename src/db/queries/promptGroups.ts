@@ -9,6 +9,11 @@ export interface PromptGroup {
   created_at: number;
   updated_at: number;
   prompt_count: number;
+  /** Member prompt ids in group-position order. Populated on list/get so
+   *  consumers don't need a second round trip to compute coverage (e.g. the
+   *  multi-select in board/column dialogs treats a "fully selected" group
+   *  as a single chip). */
+  member_ids: string[];
 }
 
 export interface PromptInGroup {
@@ -44,28 +49,52 @@ interface GroupRow {
   created_at: number;
   updated_at: number;
   prompt_count: number;
+  /** CSV of prompt ids in position order; SQLite's GROUP_CONCAT lacks a
+   *  stable "ORDER BY" guarantee, so callers re-sort when they need strict
+   *  order — our subquery pre-sorts via a nested SELECT below. */
+  member_ids_csv: string | null;
 }
 
+function splitMemberIds(csv: string | null): string[] {
+  if (!csv) return [];
+  return csv.split(",").filter((s) => s.length > 0);
+}
+
+/**
+ * Lists groups with member ids bundled in. The nested SELECT inside
+ * GROUP_CONCAT ensures position ordering — SQLite otherwise gives no
+ * guarantee about the concatenation order.
+ */
+const LIST_GROUPS_SQL = `
+  SELECT pg.*,
+    (SELECT COUNT(*) FROM prompt_group_members WHERE group_id = pg.id) AS prompt_count,
+    (SELECT GROUP_CONCAT(prompt_id)
+       FROM (SELECT prompt_id FROM prompt_group_members
+              WHERE group_id = pg.id
+              ORDER BY position ASC)) AS member_ids_csv
+  FROM prompt_groups pg
+`;
+
 export function listPromptGroups(db: Database): PromptGroup[] {
-  return db
-    .prepare(
-      `SELECT pg.*,
-         (SELECT COUNT(*) FROM prompt_group_members WHERE group_id = pg.id) AS prompt_count
-       FROM prompt_groups pg
-       ORDER BY pg.position ASC, pg.name ASC`
-    )
+  const rows = db
+    .prepare(`${LIST_GROUPS_SQL} ORDER BY pg.position ASC, pg.name ASC`)
     .all() as GroupRow[];
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    color: r.color,
+    position: r.position,
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+    prompt_count: r.prompt_count,
+    member_ids: splitMemberIds(r.member_ids_csv),
+  }));
 }
 
 export function getPromptGroup(db: Database, id: string): PromptGroupWithPrompts | null {
-  const group = db
-    .prepare(
-      `SELECT pg.*,
-         (SELECT COUNT(*) FROM prompt_group_members WHERE group_id = pg.id) AS prompt_count
-       FROM prompt_groups pg
-       WHERE pg.id = ?`
-    )
-    .get(id) as GroupRow | undefined;
+  const group = db.prepare(`${LIST_GROUPS_SQL} WHERE pg.id = ?`).get(id) as
+    | GroupRow
+    | undefined;
   if (!group) return null;
 
   const prompts = db
@@ -78,7 +107,17 @@ export function getPromptGroup(db: Database, id: string): PromptGroupWithPrompts
     )
     .all(id) as PromptInGroup[];
 
-  return { ...group, prompts };
+  return {
+    id: group.id,
+    name: group.name,
+    color: group.color,
+    position: group.position,
+    created_at: group.created_at,
+    updated_at: group.updated_at,
+    prompt_count: group.prompt_count,
+    member_ids: splitMemberIds(group.member_ids_csv),
+    prompts,
+  };
 }
 
 export function createPromptGroup(
@@ -244,14 +283,28 @@ export function reorderPromptGroups(db: Database, orderedIds: string[]): PromptG
  * in these groups" chips inside the prompt editor.
  */
 export function getGroupsForPrompt(db: Database, promptId: string): PromptGroup[] {
-  return db
+  const rows = db
     .prepare(
       `SELECT pg.*,
-         (SELECT COUNT(*) FROM prompt_group_members WHERE group_id = pg.id) AS prompt_count
+         (SELECT COUNT(*) FROM prompt_group_members WHERE group_id = pg.id) AS prompt_count,
+         (SELECT GROUP_CONCAT(prompt_id)
+            FROM (SELECT prompt_id FROM prompt_group_members
+                   WHERE group_id = pg.id
+                   ORDER BY position ASC)) AS member_ids_csv
        FROM prompt_group_members pgm
        JOIN prompt_groups pg ON pg.id = pgm.group_id
        WHERE pgm.prompt_id = ?
        ORDER BY pg.position ASC, pg.name ASC`
     )
     .all(promptId) as GroupRow[];
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    color: r.color,
+    position: r.position,
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+    prompt_count: r.prompt_count,
+    member_ids: splitMemberIds(r.member_ids_csv),
+  }));
 }

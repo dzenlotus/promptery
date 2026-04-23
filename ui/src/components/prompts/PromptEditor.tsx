@@ -192,19 +192,21 @@ export function PromptEditor({ target, onCreate, onUpdate, onCreatedDraft }: Pro
         />
       </div>
 
-      <div className="grid grid-cols-[1fr_auto] items-center gap-3 px-8 py-3 border-t border-[var(--color-border)] bg-[var(--color-bg)]/60">
-        <span className="text-[11px] text-[var(--color-text-subtle)] tabular-nums">
-          {values.content.length} character{values.content.length === 1 ? "" : "s"}
-        </span>
-        <Button
-          variant="primary"
-          size="sm"
-          data-testid="prompt-editor-save"
-          onClick={() => void onSave()}
-          disabled={!canSave}
-        >
-          {saving ? "Saving…" : !isDraft && !isDirty ? "Saved ✓" : "Save"}
-        </Button>
+      <div className="px-6 pb-4 pt-2">
+        <div className="flex items-center justify-between gap-3 pl-4 pr-1.5 py-1.5 rounded-full border border-[var(--color-border)] bg-[var(--hover-overlay)] backdrop-blur-sm">
+          <span className="text-[11px] text-[var(--color-text-subtle)] tabular-nums">
+            {values.content.length} character{values.content.length === 1 ? "" : "s"}
+          </span>
+          <Button
+            variant="primary"
+            size="sm"
+            data-testid="prompt-editor-save"
+            onClick={() => void onSave()}
+            disabled={!canSave}
+          >
+            {saving ? "Saving…" : !isDraft && !isDirty ? "Saved ✓" : "Save"}
+          </Button>
+        </div>
       </div>
     </div>
   );
