@@ -15,17 +15,39 @@ export function useWebSocket(): void {
         case "board.updated":
         case "board.deleted":
           qc.invalidateQueries({ queryKey: qk.boards });
+          if ("boardId" in evt.data) {
+            qc.invalidateQueries({ queryKey: qk.board(evt.data.boardId) });
+          }
+          qc.invalidateQueries({ queryKey: ["task-context"] });
+          break;
+        case "board.role_changed":
+        case "board.prompts_changed":
+          qc.invalidateQueries({ queryKey: qk.board(evt.data.boardId) });
+          qc.invalidateQueries({ queryKey: ["task-context"] });
           break;
         case "column.created":
         case "column.updated":
         case "column.deleted":
           qc.invalidateQueries({ queryKey: qk.columns(evt.data.boardId) });
+          if ("columnId" in evt.data) {
+            qc.invalidateQueries({ queryKey: qk.column(evt.data.columnId) });
+          }
+          qc.invalidateQueries({ queryKey: ["task-context"] });
+          break;
+        case "column.role_changed":
+        case "column.prompts_changed":
+          qc.invalidateQueries({ queryKey: qk.column(evt.data.columnId) });
+          qc.invalidateQueries({ queryKey: qk.columns(evt.data.boardId) });
+          qc.invalidateQueries({ queryKey: ["task-context"] });
           break;
         case "task.created":
         case "task.updated":
         case "task.moved":
         case "task.deleted":
           qc.invalidateQueries({ queryKey: qk.tasks(evt.data.boardId) });
+          if ("taskId" in evt.data) {
+            qc.invalidateQueries({ queryKey: qk.taskContext(evt.data.taskId) });
+          }
           break;
         case "task.role_changed":
         case "task.prompt_added":
@@ -36,6 +58,7 @@ export function useWebSocket(): void {
         case "task.mcp_tool_removed":
           qc.setQueryData(qk.task(evt.data.taskId), evt.data.task);
           qc.invalidateQueries({ queryKey: qk.tasks(evt.data.boardId) });
+          qc.invalidateQueries({ queryKey: qk.taskContext(evt.data.taskId) });
           break;
         case "prompt.created":
         case "prompt.updated":

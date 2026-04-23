@@ -23,4 +23,7 @@ export const qk = {
   settings: ["settings"] as const,
   promptGroups: ["prompt-groups"] as const,
   promptGroup: (id: string) => ["prompt-group", id] as const,
+  board: (id: string) => ["board", id] as const,
+  column: (id: string) => ["column", id] as const,
+  taskContext: (id: string) => ["task-context", id] as const,
 };

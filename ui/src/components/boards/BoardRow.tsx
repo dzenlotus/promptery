@@ -5,6 +5,7 @@ import { ROUTES } from "../../lib/routes.js";
 import { cn } from "../../lib/cn.js";
 import { BoardContextMenu } from "./BoardContextMenu.js";
 import { BoardRenameDialog } from "./BoardRenameDialog.js";
+import { BoardEditDialog } from "./BoardEditDialog.js";
 import { BoardDeleteDialog } from "./BoardDeleteDialog.js";
 
 interface Props {
@@ -15,6 +16,7 @@ interface Props {
 
 export function BoardRow({ index, board, onAfterDelete }: Props) {
   const [renameOpen, setRenameOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const [, setLocation] = useLocation();
@@ -54,6 +56,7 @@ export function BoardRow({ index, board, onAfterDelete }: Props) {
         <div className="opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100 transition-opacity">
           <BoardContextMenu
             onRename={() => setRenameOpen(true)}
+            onEdit={() => setEditOpen(true)}
             onDelete={() => setDeleteOpen(true)}
           />
         </div>
@@ -63,6 +66,11 @@ export function BoardRow({ index, board, onAfterDelete }: Props) {
         currentName={board.name}
         open={renameOpen}
         onClose={() => setRenameOpen(false)}
+      />
+      <BoardEditDialog
+        boardId={board.id}
+        open={editOpen}
+        onOpenChange={setEditOpen}
       />
       <BoardDeleteDialog
         boardId={board.id}

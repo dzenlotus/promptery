@@ -7,6 +7,7 @@ import { Input } from "../ui/Input.js";
 import { MilkdownEditor } from "../editor/MilkdownEditor.js";
 import { RoleSelector } from "./RoleSelector.js";
 import { TaskPromptsEditor } from "./TaskPromptsEditor.js";
+import { TaskEffectiveContext } from "./TaskEffectiveContext.js";
 import { api } from "../../lib/api.js";
 import { qk } from "../../lib/query.js";
 import { usePrompts } from "../../hooks/usePrompts.js";
@@ -261,6 +262,12 @@ export function TaskDialog(props: Props) {
         <Field label="Description">
           <MilkdownEditor key={editorKey} value={description} onChange={setDescription} />
         </Field>
+
+        {mode === "edit" && editingId && (
+          <Field label="Effective context">
+            <TaskEffectiveContext taskId={editingId} />
+          </Field>
+        )}
       </div>
     </Dialog>
   );

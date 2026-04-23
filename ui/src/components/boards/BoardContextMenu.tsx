@@ -1,4 +1,4 @@
-import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { MoreHorizontal, Pencil, Settings2, Trash2 } from "lucide-react";
 import {
   DropdownContent,
   DropdownItem,
@@ -10,10 +10,11 @@ import { IconButton } from "../ui/IconButton.js";
 
 interface Props {
   onRename: () => void;
+  onEdit: () => void;
   onDelete: () => void;
 }
 
-export function BoardContextMenu({ onRename, onDelete }: Props) {
+export function BoardContextMenu({ onRename, onEdit, onDelete }: Props) {
   return (
     <DropdownMenu>
       <DropdownTrigger asChild>
@@ -30,6 +31,10 @@ export function BoardContextMenu({ onRename, onDelete }: Props) {
         <DropdownItem onSelect={onRename}>
           <Pencil size={14} />
           Rename
+        </DropdownItem>
+        <DropdownItem onSelect={onEdit}>
+          <Settings2 size={14} />
+          Edit role & prompts
         </DropdownItem>
         <DropdownSeparator />
         <DropdownItem onSelect={onDelete} danger>

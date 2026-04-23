@@ -1,6 +1,6 @@
 {
   "name": "@dzenlotus/promptery",
-  "version": "0.2.0-alpha.2",
+  "version": "0.2.0",
   "description": "Kanban-based context management for AI agents via MCP",
   "keywords": [
     "mcp",
@@ -20,7 +20,8 @@
     "bin",
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=20.0.0"

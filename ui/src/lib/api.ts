@@ -1,7 +1,9 @@
 import type {
   BackupInfo,
   Board,
+  BoardWithRelations,
   Column,
+  ColumnWithRelations,
   CreatePrimitiveInput,
   CreateTaskInput,
   ExportBundle,
@@ -13,6 +15,7 @@ import type {
   Prompt,
   PromptGroup,
   PromptGroupWithPrompts,
+  ResolvedTaskContext,
   Role,
   RoleWithRelations,
   Skill,
@@ -82,19 +85,42 @@ function primitiveResource<T>(base: string) {
 export const api = {
   boards: {
     list: () => request<Board[]>("/api/boards"),
-    get: (id: string) => request<Board>(`/api/boards/${id}`),
+    get: (id: string) => request<BoardWithRelations>(`/api/boards/${id}`),
     create: (name: string) => request<Board>("/api/boards", { method: "POST", body: json({ name }) }),
     update: (id: string, name: string) =>
       request<Board>(`/api/boards/${id}`, { method: "PATCH", body: json({ name }) }),
     delete: (id: string) => request<{ ok: true }>(`/api/boards/${id}`, { method: "DELETE" }),
+    setRole: (id: string, roleId: string | null) =>
+      request<Board>(`/api/boards/${id}/role`, {
+        method: "PUT",
+        body: json({ role_id: roleId }),
+      }),
+    getPrompts: (id: string) => request<Prompt[]>(`/api/boards/${id}/prompts`),
+    setPrompts: (id: string, promptIds: string[]) =>
+      request<Prompt[]>(`/api/boards/${id}/prompts`, {
+        method: "PUT",
+        body: json({ prompt_ids: promptIds }),
+      }),
   },
   columns: {
     list: (boardId: string) => request<Column[]>(`/api/boards/${boardId}/columns`),
+    get: (id: string) => request<ColumnWithRelations>(`/api/columns/${id}`),
     create: (boardId: string, name: string) =>
       request<Column>(`/api/boards/${boardId}/columns`, { method: "POST", body: json({ name }) }),
     update: (id: string, patch: { name?: string; position?: number }) =>
       request<Column>(`/api/columns/${id}`, { method: "PATCH", body: json(patch) }),
     delete: (id: string) => request<{ ok: true }>(`/api/columns/${id}`, { method: "DELETE" }),
+    setRole: (id: string, roleId: string | null) =>
+      request<Column>(`/api/columns/${id}/role`, {
+        method: "PUT",
+        body: json({ role_id: roleId }),
+      }),
+    getPrompts: (id: string) => request<Prompt[]>(`/api/columns/${id}/prompts`),
+    setPrompts: (id: string, promptIds: string[]) =>
+      request<Prompt[]>(`/api/columns/${id}/prompts`, {
+        method: "PUT",
+        body: json({ prompt_ids: promptIds }),
+      }),
   },
   tasks: {
     list: (boardId: string) => request<Task[]>(`/api/boards/${boardId}/tasks`),
@@ -135,6 +161,7 @@ export const api = {
       }),
     removeMcpTool: (id: string, toolId: string) =>
       request<Task>(`/api/tasks/${id}/mcp_tools/${toolId}`, { method: "DELETE" }),
+    context: (id: string) => request<ResolvedTaskContext>(`/api/tasks/${id}/context`),
   },
   prompts: primitiveResource<Prompt>("/api/prompts"),
   promptGroups: {

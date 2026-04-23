@@ -1,8 +1,14 @@
 export interface Board {
   id: string;
   name: string;
+  role_id: string | null;
   created_at: number;
   updated_at: number;
+}
+
+export interface BoardWithRelations extends Board {
+  role: Role | null;
+  prompts: Prompt[];
 }
 
 export interface Column {
@@ -10,7 +16,13 @@ export interface Column {
   board_id: string;
   name: string;
   position: number;
+  role_id: string | null;
   created_at: number;
+}
+
+export interface ColumnWithRelations extends Column {
+  role: Role | null;
+  prompts: Prompt[];
 }
 
 export interface Prompt {
@@ -105,6 +117,45 @@ export interface PromptGroupWithPrompts extends PromptGroup {
   prompts: PromptInGroup[];
 }
 
+export type PromptOrigin =
+  | "direct"
+  | "role"
+  | "column"
+  | "column-role"
+  | "board"
+  | "board-role";
+
+export interface ResolvedPromptSource {
+  type: "role" | "column" | "column-role" | "board" | "board-role";
+  id: string;
+  name: string;
+}
+
+export interface ResolvedPrompt {
+  id: string;
+  name: string;
+  content: string;
+  color: string | null;
+  origin: PromptOrigin;
+  source?: ResolvedPromptSource;
+}
+
+export type RoleSource = "task" | "column" | "board";
+
+export interface ResolvedRole {
+  id: string;
+  name: string;
+  content: string;
+  color: string | null;
+  source: RoleSource;
+}
+
+export interface ResolvedTaskContext {
+  task_id: string;
+  role: ResolvedRole | null;
+  prompts: ResolvedPrompt[];
+}
+
 export interface BackupInfo {
   filename: string;
   fullPath: string;
@@ -175,9 +226,30 @@ export type ServerEvent =
   | { type: "board.created"; data: { boardId: string; board: Board } }
   | { type: "board.updated"; data: { boardId: string; board: Board } }
   | { type: "board.deleted"; data: { boardId: string } }
+  | {
+      type: "board.role_changed";
+      data: { boardId: string; roleId: string | null; board: Board };
+    }
+  | {
+      type: "board.prompts_changed";
+      data: { boardId: string; prompts: Prompt[] };
+    }
   | { type: "column.created"; data: { boardId: string; column: Column } }
   | { type: "column.updated"; data: { boardId: string; columnId: string; column: Column } }
   | { type: "column.deleted"; data: { boardId: string; columnId: string } }
+  | {
+      type: "column.role_changed";
+      data: {
+        boardId: string;
+        columnId: string;
+        roleId: string | null;
+        column: Column;
+      };
+    }
+  | {
+      type: "column.prompts_changed";
+      data: { boardId: string; columnId: string; prompts: Prompt[] };
+    }
   | { type: "task.created"; data: { boardId: string; task: Task } }
   | { type: "task.updated"; data: { boardId: string; taskId: string; task: Task } }
   | {

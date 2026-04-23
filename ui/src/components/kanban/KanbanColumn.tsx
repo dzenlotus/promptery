@@ -1,13 +1,18 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Plus } from "lucide-react";
 import type { Column, Task } from "../../lib/types.js";
+import { api } from "../../lib/api.js";
+import { qk } from "../../lib/query.js";
 import { IconButton } from "../ui/IconButton.js";
+import { Chip } from "../ui/Chip.js";
 import { TaskCard } from "./TaskCard.js";
 import { TaskDialog } from "../tasks/TaskDialog.js";
 import { ColumnContextMenu } from "./ColumnContextMenu.js";
 import { ColumnRenameDialog } from "./ColumnRenameDialog.js";
+import { ColumnEditDialog } from "./ColumnEditDialog.js";
 import { ColumnDeleteDialog } from "./ColumnDeleteDialog.js";
 
 interface Props {
@@ -19,11 +24,26 @@ interface Props {
 export function KanbanColumn({ boardId, column, tasks }: Props) {
   const [createOpen, setCreateOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const { setNodeRef, isOver } = useDroppable({
     id: column.id,
     data: { type: "column", columnId: column.id },
   });
+
+  // Column detail drives the role chip + prompt chips under the title. The
+  // base Column row from the board listing carries only role_id, not the
+  // joined role payload, so we fetch on demand.
+  const { data: detail } = useQuery({
+    queryKey: qk.column(column.id),
+    queryFn: () => api.columns.get(column.id),
+    // The column list endpoint doesn't include role+prompts, so the detail
+    // fetch is the only way to show them. Keep it running; small payload.
+    staleTime: 30_000,
+  });
+
+  const role = detail?.role ?? null;
+  const prompts = detail?.prompts ?? [];
 
   return (
     <div
@@ -31,24 +51,56 @@ export function KanbanColumn({ boardId, column, tasks }: Props) {
       data-column-name={column.name}
       className="grid grid-rows-[auto_1fr] gap-3 h-full min-h-0 rounded-xl p-3 border border-[var(--color-border)] bg-transparent"
     >
-      <div className="grid grid-cols-[1fr_auto] items-center gap-2">
-        <div className="flex items-baseline gap-2 min-w-0">
-          <h3 className="text-[13px] font-medium tracking-tight truncate text-[var(--color-text-muted)]">
-            {column.name}
-          </h3>
-          <span className="text-[11px] tabular-nums text-[var(--color-text-subtle)]">
-            {tasks.length}
-          </span>
+      <div className="grid gap-1.5">
+        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
+          <div className="flex items-baseline gap-2 min-w-0">
+            <h3 className="text-[13px] font-medium tracking-tight truncate text-[var(--color-text-muted)]">
+              {column.name}
+            </h3>
+            <span className="text-[11px] tabular-nums text-[var(--color-text-subtle)]">
+              {tasks.length}
+            </span>
+          </div>
+
+          {role ? (
+            <span
+              data-testid={`column-role-chip-${column.id}`}
+              title={`Column role: ${role.name}`}
+              className="justify-self-center min-w-0 inline-flex items-center gap-1 h-5 px-1.5 rounded-full text-[10px] bg-[var(--hover-overlay)] text-[var(--color-text-muted)] border border-[var(--color-border)]"
+            >
+              <span
+                aria-hidden
+                className="h-1 w-1 rounded-full shrink-0"
+                style={{ backgroundColor: role.color || "#7a746a" }}
+              />
+              <span className="truncate">{role.name}</span>
+            </span>
+          ) : (
+            <span />
+          )}
+
+          <div className="flex items-center gap-0.5">
+            <IconButton label="Add task" size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus size={14} />
+            </IconButton>
+            <ColumnContextMenu
+              onRename={() => setRenameOpen(true)}
+              onEdit={() => setEditOpen(true)}
+              onDelete={() => setDeleteOpen(true)}
+            />
+          </div>
         </div>
-        <div className="flex items-center gap-0.5">
-          <IconButton label="Add task" size="sm" onClick={() => setCreateOpen(true)}>
-            <Plus size={14} />
-          </IconButton>
-          <ColumnContextMenu
-            onRename={() => setRenameOpen(true)}
-            onDelete={() => setDeleteOpen(true)}
-          />
-        </div>
+
+        {prompts.length > 0 && (
+          <div
+            data-testid={`column-prompt-chips-${column.id}`}
+            className="flex flex-wrap gap-1"
+          >
+            {prompts.map((p) => (
+              <Chip key={p.id} name={p.name} color={p.color} size="sm" />
+            ))}
+          </div>
+        )}
       </div>
 
       <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
@@ -80,6 +132,12 @@ export function KanbanColumn({ boardId, column, tasks }: Props) {
         column={column}
         open={renameOpen}
         onClose={() => setRenameOpen(false)}
+      />
+      <ColumnEditDialog
+        columnId={column.id}
+        boardId={boardId}
+        open={editOpen}
+        onOpenChange={setEditOpen}
       />
       <ColumnDeleteDialog
         boardId={boardId}
