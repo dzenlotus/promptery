@@ -17,7 +17,9 @@ export const IconButton = forwardRef<HTMLButtonElement, Props>(function IconButt
   { children, label, size = "md", tone = "muted", className, ...props },
   ref
 ) {
-  const sizeCls = size === "sm" ? "h-6 w-6" : "h-7 w-7";
+  // Height only — width collapses to the icon itself so the hit area is tight
+  // around the glyph instead of a square chip.
+  const sizeCls = size === "sm" ? "h-6" : "h-7";
   const toneCls =
     tone === "danger"
       ? "text-[var(--color-text-subtle)] hover:text-[var(--color-danger)]"
@@ -29,7 +31,6 @@ export const IconButton = forwardRef<HTMLButtonElement, Props>(function IconButt
       title={label}
       className={cn(
         "inline-flex items-center justify-center rounded-md transition-colors duration-150",
-        "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-ring)]",
         sizeCls,
         toneCls,
         className

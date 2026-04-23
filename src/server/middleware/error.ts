@@ -3,7 +3,16 @@ import { ConflictError } from "../../db/queries/errors.js";
 
 export const errorHandler: ErrorHandler = (err, c) => {
   if (err instanceof ConflictError) {
-    return c.json({ error: err.message }, 409);
+    return c.json(
+      {
+        error: err.message,
+        field: err.field,
+        issues: err.field
+          ? [{ field: err.field, message: err.message }]
+          : undefined,
+      },
+      409
+    );
   }
 
   console.error("[promptery] error:", err);

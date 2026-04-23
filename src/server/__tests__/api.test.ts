@@ -53,56 +53,146 @@ describe("REST API", () => {
     const gone = await api("GET", `/api/boards/${board.id}`);
     expect(gone.status).toBe(404);
   });
+});
 
-  it("rejects invalid tag color and name", async () => {
-    const badColor = await api("POST", "/api/tags", { name: "x", color: "red" });
+describe("typed primitives", () => {
+  it("rejects invalid prompt color and name", async () => {
+    const badColor = await api("POST", "/api/prompts", { name: "x", color: "red" });
     expect(badColor.status).toBe(400);
 
-    const badName = await api("POST", "/api/tags", { name: "Bad Name!" });
+    const badName = await api("POST", "/api/prompts", { name: "Bad Name!" });
     expect(badName.status).toBe(400);
   });
 
-  it("returns 409 on duplicate tag name", async () => {
-    const r1 = await api("POST", "/api/tags", { name: "dup-tag", kind: "skill" });
+  it("returns 409 on duplicate prompt name", async () => {
+    const r1 = await api("POST", "/api/prompts", { name: "dup-prompt" });
     expect(r1.status).toBe(201);
-    const r2 = await api("POST", "/api/tags", { name: "dup-tag", kind: "skill" });
+    const r2 = await api("POST", "/api/prompts", { name: "dup-prompt" });
     expect(r2.status).toBe(409);
   });
 
-  it("creates a tag and lists it", async () => {
-    await api("POST", "/api/tags", {
-      name: "react-perf",
-      description: "Optimize React renders",
-      color: "#ff6b6b",
-      kind: "skill",
-    });
-    const list = await api("GET", "/api/tags");
-    const tags = (await list.json()) as Array<{ name: string }>;
-    expect(tags.some((t) => t.name === "react-perf")).toBe(true);
+  it("creates and lists each primitive type", async () => {
+    const expected = [
+      ["/api/prompts", "p-list"],
+      ["/api/skills", "s-list"],
+      ["/api/mcp_tools", "m-list"],
+      ["/api/roles", "r-list"],
+    ] as const;
+    for (const [path, name] of expected) {
+      const c = await api("POST", path, { name });
+      expect(c.status).toBe(201);
+      const list = (await (await api("GET", path)).json()) as Array<{ name: string }>;
+      expect(list.some((x) => x.name === name)).toBe(true);
+    }
   });
 
-  it("filters tags by kind", async () => {
-    await api("POST", "/api/tags", { name: "staff-architect", kind: "role" });
-    await api("POST", "/api/tags", { name: "ts-perf", kind: "skill" });
-    await api("POST", "/api/tags", { name: "summarise", kind: "prompt" });
+  it("PUT /api/roles/:id/prompts attaches prompts to a role", async () => {
+    const role = (await (await api("POST", "/api/roles", { name: "r-attach" })).json()) as {
+      id: string;
+    };
+    const p = (await (await api("POST", "/api/prompts", { name: "p-attach" })).json()) as {
+      id: string;
+    };
+    const res = await api("PUT", `/api/roles/${role.id}/prompts`, { prompt_ids: [p.id] });
+    expect(res.status).toBe(200);
+    const got = (await (await api("GET", `/api/roles/${role.id}`)).json()) as {
+      prompts: { id: string }[];
+    };
+    expect(got.prompts.map((x) => x.id)).toEqual([p.id]);
+  });
+});
 
-    const roles = (await (await api("GET", "/api/tags?kind=role")).json()) as Array<{
-      name: string;
-      kind: string;
-    }>;
-    expect(roles.every((t) => t.kind === "role")).toBe(true);
-    expect(roles.some((t) => t.name === "staff-architect")).toBe(true);
+describe("task ↔ role flow", () => {
+  async function newBoardAndTask() {
+    const board = (await (await api("POST", "/api/boards", { name: "B" })).json()) as {
+      id: string;
+    };
+    const cols = (await (await api("GET", `/api/boards/${board.id}/columns`)).json()) as {
+      id: string;
+    }[];
+    const task = (await (
+      await api("POST", `/api/boards/${board.id}/tasks`, {
+        column_id: cols[0]!.id,
+        title: "T",
+      })
+    ).json()) as { id: string };
+    return { boardId: board.id, taskId: task.id };
+  }
 
-    const prompts = (await (await api("GET", "/api/tags?kind=prompt")).json()) as Array<{
-      name: string;
-      kind: string;
-    }>;
-    expect(prompts.every((t) => t.kind === "prompt")).toBe(true);
+  it("PUT /api/tasks/:id/role assigns role and inherits its primitives", async () => {
+    const { taskId } = await newBoardAndTask();
+    const role = (await (await api("POST", "/api/roles", { name: "r-flow" })).json()) as {
+      id: string;
+    };
+    const p = (await (await api("POST", "/api/prompts", { name: "p-flow" })).json()) as {
+      id: string;
+    };
+    await api("PUT", `/api/roles/${role.id}/prompts`, { prompt_ids: [p.id] });
+
+    const res = await api("PUT", `/api/tasks/${taskId}/role`, { role_id: role.id });
+    expect(res.status).toBe(200);
+    const task = (await res.json()) as {
+      role: { id: string };
+      prompts: { id: string; origin: string }[];
+    };
+    expect(task.role.id).toBe(role.id);
+    expect(task.prompts).toEqual([
+      expect.objectContaining({ id: p.id, origin: `role:${role.id}` }),
+    ]);
   });
 
-  it("rejects a tag created with an unknown kind", async () => {
-    const res = await api("POST", "/api/tags", { name: "bogus", kind: "something" });
-    expect(res.status).toBe(400);
+  it("DELETE on a role-inherited prompt returns 403", async () => {
+    const { taskId } = await newBoardAndTask();
+    const role = (await (await api("POST", "/api/roles", { name: "r-403" })).json()) as {
+      id: string;
+    };
+    const p = (await (await api("POST", "/api/prompts", { name: "p-403" })).json()) as {
+      id: string;
+    };
+    await api("PUT", `/api/roles/${role.id}/prompts`, { prompt_ids: [p.id] });
+    await api("PUT", `/api/tasks/${taskId}/role`, { role_id: role.id });
+
+    const res = await api("DELETE", `/api/tasks/${taskId}/prompts/${p.id}`);
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toMatch(/role-inherited/);
+  });
+
+  it("POST + DELETE direct prompt on task works", async () => {
+    const { taskId } = await newBoardAndTask();
+    const p = (await (await api("POST", "/api/prompts", { name: "p-direct" })).json()) as {
+      id: string;
+    };
+
+    const added = await api("POST", `/api/tasks/${taskId}/prompts`, { prompt_id: p.id });
+    expect(added.status).toBe(201);
+    const taskWithDirect = (await added.json()) as {
+      prompts: { id: string; origin: string }[];
+    };
+    expect(taskWithDirect.prompts[0]).toMatchObject({ id: p.id, origin: "direct" });
+
+    const removed = await api("DELETE", `/api/tasks/${taskId}/prompts/${p.id}`);
+    expect(removed.status).toBe(200);
+    const taskAfter = (await removed.json()) as { prompts: unknown[] };
+    expect(taskAfter.prompts).toEqual([]);
+  });
+
+  it("clearing role with role_id=null wipes inherited items", async () => {
+    const { taskId } = await newBoardAndTask();
+    const role = (await (await api("POST", "/api/roles", { name: "r-clear" })).json()) as {
+      id: string;
+    };
+    const p = (await (await api("POST", "/api/prompts", { name: "p-clear" })).json()) as {
+      id: string;
+    };
+    await api("PUT", `/api/roles/${role.id}/prompts`, { prompt_ids: [p.id] });
+    await api("PUT", `/api/tasks/${taskId}/role`, { role_id: role.id });
+
+    const cleared = await api("PUT", `/api/tasks/${taskId}/role`, { role_id: null });
+    expect(cleared.status).toBe(200);
+    const task = (await cleared.json()) as { role: unknown; prompts: unknown[] };
+    expect(task.role).toBeNull();
+    expect(task.prompts).toEqual([]);
   });
 });
 

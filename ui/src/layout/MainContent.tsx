@@ -10,7 +10,10 @@ import type { ReactNode } from "react";
  */
 export function MainContent({ children }: { children: ReactNode }) {
   return (
-    <div className="relative h-full overflow-hidden rounded-2xl">
+    <div
+      data-testid="main-content"
+      className="relative h-full overflow-hidden rounded-2xl"
+    >
       <div className="h-full mx-auto w-full max-w-[1280px]">{children}</div>
     </div>
   );

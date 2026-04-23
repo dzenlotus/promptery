@@ -18,6 +18,18 @@ export const moveTaskSchema = z.object({
   position: z.number().finite(),
 });
 
-export const addTagSchema = z.object({
-  tag_id: z.string().min(1),
+export const setTaskRoleSchema = z.object({
+  role_id: z.string().min(1).nullable(),
+});
+
+export const addTaskPromptSchema = z.object({
+  prompt_id: z.string().min(1),
+});
+
+export const addTaskSkillSchema = z.object({
+  skill_id: z.string().min(1),
+});
+
+export const addTaskMcpToolSchema = z.object({
+  mcp_tool_id: z.string().min(1),
 });

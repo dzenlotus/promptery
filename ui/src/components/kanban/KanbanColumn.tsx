@@ -21,7 +21,11 @@ export function KanbanColumn({ boardId, column, tasks }: Props) {
   });
 
   return (
-    <div className="grid grid-rows-[auto_1fr] gap-3 h-full min-h-0 rounded-xl p-3 solid-border bg-transparent">
+    <div
+      data-testid={`kanban-column-${column.id}`}
+      data-column-name={column.name}
+      className="grid grid-rows-[auto_1fr] gap-3 h-full min-h-0 rounded-xl p-3 border border-[var(--color-border)] bg-transparent"
+    >
       <div className="grid grid-cols-[1fr_auto] items-center gap-2">
         <div className="flex items-baseline gap-2 min-w-0">
           <h3 className="text-[13px] font-medium tracking-tight truncate text-[var(--color-text-muted)]">
@@ -39,7 +43,7 @@ export function KanbanColumn({ boardId, column, tasks }: Props) {
       <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
         <div
           ref={setNodeRef}
-          className={`overflow-y-auto scroll-thin grid auto-rows-max gap-2.5 pr-1 min-h-[40px] rounded-md transition-colors ${
+          className={`overflow-y-auto scroll-thin grid auto-rows-max gap-2.5 min-h-[40px] rounded-md transition-colors ${
             isOver ? "bg-[var(--hover-overlay)]" : ""
           }`}
         >

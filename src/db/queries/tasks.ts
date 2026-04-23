@@ -1,5 +1,9 @@
 import type { Database } from "better-sqlite3";
 import { nanoid } from "nanoid";
+import type { Role } from "./roles.js";
+import { listTaskPrompts, type TaskPrompt } from "./taskPrompts.js";
+import { listTaskSkills, type TaskSkill } from "./taskSkills.js";
+import { listTaskMcpTools, type TaskMcpTool } from "./taskMcpTools.js";
 
 export interface Task {
   id: string;
@@ -9,27 +13,16 @@ export interface Task {
   title: string;
   description: string;
   position: number;
+  role_id: string | null;
   created_at: number;
   updated_at: number;
 }
 
-export interface TaskTagLite {
-  id: string;
-  name: string;
-  color: string;
-  kind: "role" | "skill" | "prompt" | "mcp";
-}
-
-export interface TaskTagFull extends TaskTagLite {
-  description: string;
-}
-
-export interface TaskWithTags extends Task {
-  tags: TaskTagLite[];
-}
-
-export interface TaskWithTagsFull extends Task {
-  tags: TaskTagFull[];
+export interface TaskWithRelations extends Task {
+  role: Role | null;
+  prompts: TaskPrompt[];
+  skills: TaskSkill[];
+  mcp_tools: TaskMcpTool[];
 }
 
 export interface CreateTaskInput {
@@ -44,65 +37,46 @@ export interface UpdateTaskInput {
   position?: number;
 }
 
-type TaskRow = Task & { tags_json: string };
-
-/**
- * json_group_array + FILTER handles the LEFT JOIN correctly — no tags means '[]' instead of [null].
- */
-export function listTasks(db: Database, boardId: string, columnId?: string): TaskWithTags[] {
-  const columnFilter = columnId ? "AND t.column_id = ?" : "";
-  const params = columnId ? [boardId, columnId] : [boardId];
-  const rows = db
-    .prepare(
-      `
-      SELECT
-        t.*,
-        COALESCE(
-          json_group_array(
-            json_object('id', tags.id, 'name', tags.name, 'color', tags.color, 'kind', tags.kind)
-          ) FILTER (WHERE tags.id IS NOT NULL),
-          '[]'
-        ) AS tags_json
-      FROM tasks t
-      LEFT JOIN task_tags tt ON tt.task_id = t.id
-      LEFT JOIN tags ON tags.id = tt.tag_id
-      WHERE t.board_id = ? ${columnFilter}
-      GROUP BY t.id
-      ORDER BY t.column_id, t.position ASC
-    `
-    )
-    .all(...params) as TaskRow[];
-
-  return rows.map((row) => {
-    const { tags_json, ...task } = row;
-    return { ...task, tags: JSON.parse(tags_json) as TaskTagLite[] };
-  });
+function getRawTask(db: Database, id: string): Task | null {
+  const row = db.prepare("SELECT * FROM tasks WHERE id = ?").get(id) as Task | undefined;
+  return row ?? null;
 }
 
-export function getTask(db: Database, id: string): TaskWithTagsFull | null {
-  const row = db
-    .prepare(
-      `
-      SELECT
-        t.*,
-        COALESCE(
-          json_group_array(
-            json_object('id', tags.id, 'name', tags.name, 'color', tags.color, 'kind', tags.kind, 'description', tags.description)
-          ) FILTER (WHERE tags.id IS NOT NULL),
-          '[]'
-        ) AS tags_json
-      FROM tasks t
-      LEFT JOIN task_tags tt ON tt.task_id = t.id
-      LEFT JOIN tags ON tags.id = tt.tag_id
-      WHERE t.id = ?
-      GROUP BY t.id
-    `
-    )
-    .get(id) as TaskRow | undefined;
+function attachRelations(db: Database, task: Task): TaskWithRelations {
+  const role = task.role_id
+    ? (db.prepare("SELECT * FROM roles WHERE id = ?").get(task.role_id) as Role | undefined) ??
+      null
+    : null;
+  return {
+    ...task,
+    role,
+    prompts: listTaskPrompts(db, task.id),
+    skills: listTaskSkills(db, task.id),
+    mcp_tools: listTaskMcpTools(db, task.id),
+  };
+}
 
-  if (!row) return null;
-  const { tags_json, ...task } = row;
-  return { ...task, tags: JSON.parse(tags_json) as TaskTagFull[] };
+export function listTasks(
+  db: Database,
+  boardId: string,
+  columnId?: string
+): TaskWithRelations[] {
+  const rows = columnId
+    ? (db
+        .prepare(
+          "SELECT * FROM tasks WHERE board_id = ? AND column_id = ? ORDER BY column_id, position ASC"
+        )
+        .all(boardId, columnId) as Task[])
+    : (db
+        .prepare("SELECT * FROM tasks WHERE board_id = ? ORDER BY column_id, position ASC")
+        .all(boardId) as Task[]);
+  return rows.map((t) => attachRelations(db, t));
+}
+
+export function getTask(db: Database, id: string): TaskWithRelations | null {
+  const task = getRawTask(db, id);
+  if (!task) return null;
+  return attachRelations(db, task);
 }
 
 export function createTask(
@@ -137,14 +111,10 @@ export function createTask(
     title: input.title,
     description,
     position: posRow.next,
+    role_id: null,
     created_at: now,
     updated_at: now,
   };
-}
-
-function getRawTask(db: Database, id: string): Task | null {
-  const row = db.prepare("SELECT * FROM tasks WHERE id = ?").get(id) as Task | undefined;
-  return row ?? null;
 }
 
 export function updateTask(db: Database, id: string, input: UpdateTaskInput): Task | null {
@@ -191,16 +161,70 @@ export function deleteTask(db: Database, id: string): boolean {
   return result.changes > 0;
 }
 
-export function addTagToTask(db: Database, taskId: string, tagId: string): boolean {
-  const result = db
-    .prepare("INSERT OR IGNORE INTO task_tags (task_id, tag_id) VALUES (?, ?)")
-    .run(taskId, tagId);
-  return result.changes > 0;
-}
+/**
+ * Assign or clear the task's role and reconcile its inherited primitives.
+ *
+ * Removes any previously inherited rows tagged `role:<old>` first, then
+ * (if a new role is given) copies that role's prompts/skills/mcp_tools into
+ * the task_* tables tagged `role:<new>`. Direct-attached primitives are
+ * untouched. INSERT OR IGNORE so a primitive already attached directly
+ * stays as-is rather than being shadowed by a role-origin duplicate.
+ */
+export function setTaskRole(db: Database, taskId: string, roleId: string | null): void {
+  const tx = db.transaction(() => {
+    const currentTask = db
+      .prepare("SELECT role_id FROM tasks WHERE id = ?")
+      .get(taskId) as { role_id: string | null } | undefined;
 
-export function removeTagFromTask(db: Database, taskId: string, tagId: string): boolean {
-  const result = db
-    .prepare("DELETE FROM task_tags WHERE task_id = ? AND tag_id = ?")
-    .run(taskId, tagId);
-  return result.changes > 0;
+    if (currentTask?.role_id) {
+      const oldOrigin = `role:${currentTask.role_id}`;
+      db.prepare("DELETE FROM task_prompts WHERE task_id = ? AND origin = ?").run(
+        taskId,
+        oldOrigin
+      );
+      db.prepare("DELETE FROM task_skills WHERE task_id = ? AND origin = ?").run(
+        taskId,
+        oldOrigin
+      );
+      db.prepare("DELETE FROM task_mcp_tools WHERE task_id = ? AND origin = ?").run(
+        taskId,
+        oldOrigin
+      );
+    }
+
+    db.prepare("UPDATE tasks SET role_id = ?, updated_at = ? WHERE id = ?").run(
+      roleId,
+      Date.now(),
+      taskId
+    );
+
+    if (roleId) {
+      const newOrigin = `role:${roleId}`;
+
+      const rolePrompts = db
+        .prepare("SELECT prompt_id FROM role_prompts WHERE role_id = ? ORDER BY position")
+        .all(roleId) as { prompt_id: string }[];
+      const insertPrompt = db.prepare(
+        "INSERT OR IGNORE INTO task_prompts (task_id, prompt_id, origin, position) VALUES (?, ?, ?, ?)"
+      );
+      rolePrompts.forEach(({ prompt_id }, i) => insertPrompt.run(taskId, prompt_id, newOrigin, i));
+
+      const roleSkills = db
+        .prepare("SELECT skill_id FROM role_skills WHERE role_id = ? ORDER BY position")
+        .all(roleId) as { skill_id: string }[];
+      const insertSkill = db.prepare(
+        "INSERT OR IGNORE INTO task_skills (task_id, skill_id, origin, position) VALUES (?, ?, ?, ?)"
+      );
+      roleSkills.forEach(({ skill_id }, i) => insertSkill.run(taskId, skill_id, newOrigin, i));
+
+      const roleMcp = db
+        .prepare("SELECT mcp_tool_id FROM role_mcp_tools WHERE role_id = ? ORDER BY position")
+        .all(roleId) as { mcp_tool_id: string }[];
+      const insertMcp = db.prepare(
+        "INSERT OR IGNORE INTO task_mcp_tools (task_id, mcp_tool_id, origin, position) VALUES (?, ?, ?, ?)"
+      );
+      roleMcp.forEach(({ mcp_tool_id }, i) => insertMcp.run(taskId, mcp_tool_id, newOrigin, i));
+    }
+  });
+  tx();
 }

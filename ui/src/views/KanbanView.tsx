@@ -6,6 +6,8 @@ import { useColumns } from "../hooks/useColumns.js";
 import { useTasks } from "../hooks/useTasks.js";
 import { ROUTES } from "../lib/routes.js";
 import { KanbanBoard } from "../components/kanban/KanbanBoard.js";
+import { BoardsList } from "../components/boards/BoardsList.js";
+import { PageLayout } from "../layout/PageLayout.js";
 
 export function KanbanView() {
   const { id: boardId } = useParams<{ id: string }>();
@@ -23,16 +25,20 @@ export function KanbanView() {
     }
   }, [boardsLoading, boardId, boards.length, board, setLocation]);
 
-  if (boardsLoading) {
-    return (
-      <div className="h-full grid place-items-center text-[var(--color-text-subtle)] text-[13px]">
-        Loading…
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid grid-rows-[auto_1fr] h-full gap-5 p-6 min-h-0">
+  const mainContent = boardsLoading ? (
+    <div
+      data-testid="kanban-view"
+      data-loading="true"
+      className="h-full grid place-items-center text-[var(--color-text-subtle)] text-[13px]"
+    >
+      Loading…
+    </div>
+  ) : (
+    <div
+      data-testid="kanban-view"
+      data-board-id={boardId}
+      className="grid grid-rows-[auto_1fr] h-full gap-5 p-6 min-h-0"
+    >
       <header>
         <h1 className="text-[26px] font-semibold tracking-[-0.02em]">{board?.name ?? " "}</h1>
       </header>
@@ -45,4 +51,6 @@ export function KanbanView() {
       ) : null}
     </div>
   );
+
+  return <PageLayout sidebarContent={<BoardsList />} mainContent={mainContent} />;
 }

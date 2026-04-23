@@ -6,9 +6,13 @@ import {
   createTaskSchema,
   updateTaskSchema,
   moveTaskSchema,
-  addTagSchema,
+  setTaskRoleSchema,
+  addTaskPromptSchema,
+  addTaskSkillSchema,
+  addTaskMcpToolSchema,
 } from "../validators/tasks.js";
 import { bus } from "../events/bus.js";
+import { buildContextBundle } from "../../lib/context.js";
 
 export const boardTasksRoute = new Hono();
 
@@ -29,8 +33,10 @@ boardTasksRoute.post("/:boardId/tasks", zValidator("json", createTaskSchema), (c
     return c.json({ error: "column does not belong to this board" }, 400);
   }
   const task = q.createTask(getDb(), boardId, column_id, { title, description });
-  bus.publish({ type: "task.created", data: { boardId, task } });
-  return c.json(task, 201);
+  // Refetch with relations so the event shape matches GET /tasks/:id
+  const full = q.getTask(getDb(), task.id)!;
+  bus.publish({ type: "task.created", data: { boardId, task: full } });
+  return c.json(full, 201);
 });
 
 export const tasksRoute = new Hono();
@@ -39,6 +45,18 @@ tasksRoute.get("/:id", (c) => {
   const task = q.getTask(getDb(), c.req.param("id"));
   if (!task) return c.json({ error: "task not found" }, 404);
   return c.json(task);
+});
+
+/**
+ * Returns the task's context bundle as XML (the exact string an agent would
+ * paste into its system prompt). MCP's get_task_bundle tool proxies this
+ * endpoint verbatim — it ships the agent XML rather than JSON wrapping XML.
+ */
+tasksRoute.get("/:id/bundle", (c) => {
+  const task = q.getTask(getDb(), c.req.param("id"));
+  if (!task) return c.json({ error: "task not found" }, 404);
+  const xml = buildContextBundle(task);
+  return c.body(xml, 200, { "Content-Type": "application/xml; charset=utf-8" });
 });
 
 tasksRoute.patch("/:id", zValidator("json", updateTaskSchema), (c) => {
@@ -57,11 +75,12 @@ tasksRoute.patch("/:id", zValidator("json", updateTaskSchema), (c) => {
 
   const updated = q.updateTask(getDb(), id, input);
   if (!updated) return c.json({ error: "task not found" }, 404);
+  const full = q.getTask(getDb(), id)!;
   bus.publish({
     type: "task.updated",
-    data: { boardId: updated.board_id, taskId: updated.id, task: updated },
+    data: { boardId: updated.board_id, taskId: updated.id, task: full },
   });
-  return c.json(updated);
+  return c.json(full);
 });
 
 tasksRoute.post("/:id/move", zValidator("json", moveTaskSchema), (c) => {
@@ -79,7 +98,7 @@ tasksRoute.post("/:id/move", zValidator("json", moveTaskSchema), (c) => {
     type: "task.moved",
     data: { boardId: moved.board_id, taskId: moved.id, columnId: column_id, position },
   });
-  return c.json(moved);
+  return c.json(q.getTask(getDb(), id));
 });
 
 tasksRoute.delete("/:id", (c) => {
@@ -91,29 +110,126 @@ tasksRoute.delete("/:id", (c) => {
   return c.json({ ok: true });
 });
 
-tasksRoute.post("/:id/tags", zValidator("json", addTagSchema), (c) => {
-  const taskId = c.req.param("id");
-  const { tag_id } = c.req.valid("json");
-
-  if (!q.getTask(getDb(), taskId)) return c.json({ error: "task not found" }, 404);
-  const tag = q.getTag(getDb(), tag_id);
-  if (!tag) return c.json({ error: "tag not found" }, 404);
-
-  q.addTagToTask(getDb(), taskId, tag_id);
-  bus.publish({ type: "task.tag_added", data: { taskId, tag } });
-  return c.json({ ok: true }, 201);
+tasksRoute.put("/:id/role", zValidator("json", setTaskRoleSchema), (c) => {
+  const id = c.req.param("id");
+  const existing = q.getTask(getDb(), id);
+  if (!existing) return c.json({ error: "task not found" }, 404);
+  const { role_id } = c.req.valid("json");
+  if (role_id && !q.getRole(getDb(), role_id)) {
+    return c.json({ error: "role not found" }, 404);
+  }
+  q.setTaskRole(getDb(), id, role_id);
+  const full = q.getTask(getDb(), id)!;
+  bus.publish({
+    type: "task.role_changed",
+    data: { boardId: full.board_id, taskId: id, roleId: role_id, task: full },
+  });
+  return c.json(full);
 });
 
-tasksRoute.delete("/:id/tags/:tagId", (c) => {
+tasksRoute.post("/:id/prompts", zValidator("json", addTaskPromptSchema), (c) => {
   const taskId = c.req.param("id");
-  const tagId = c.req.param("tagId");
-
+  const { prompt_id } = c.req.valid("json");
   if (!q.getTask(getDb(), taskId)) return c.json({ error: "task not found" }, 404);
+  if (!q.getPrompt(getDb(), prompt_id)) return c.json({ error: "prompt not found" }, 404);
+  q.addTaskPrompt(getDb(), taskId, prompt_id, "direct");
+  const full = q.getTask(getDb(), taskId)!;
+  bus.publish({
+    type: "task.prompt_added",
+    data: { boardId: full.board_id, taskId, promptId: prompt_id, task: full },
+  });
+  return c.json(full, 201);
+});
 
-  const removed = q.removeTagFromTask(getDb(), taskId, tagId);
-  if (!removed) return c.json({ error: "tag was not attached to task" }, 404);
-  bus.publish({ type: "task.tag_removed", data: { taskId, tagId } });
-  return c.json({ ok: true });
+tasksRoute.delete("/:id/prompts/:promptId", (c) => {
+  const taskId = c.req.param("id");
+  const promptId = c.req.param("promptId");
+  if (!q.getTask(getDb(), taskId)) return c.json({ error: "task not found" }, 404);
+  const origin = q.getTaskPromptOrigin(getDb(), taskId, promptId);
+  if (origin === null) return c.json({ error: "prompt was not attached to task" }, 404);
+  if (origin !== "direct") {
+    return c.json(
+      { error: "Cannot remove role-inherited items. Remove the role instead." },
+      403
+    );
+  }
+  q.removeTaskPrompt(getDb(), taskId, promptId);
+  const full = q.getTask(getDb(), taskId)!;
+  bus.publish({
+    type: "task.prompt_removed",
+    data: { boardId: full.board_id, taskId, promptId, task: full },
+  });
+  return c.json(full);
+});
+
+tasksRoute.post("/:id/skills", zValidator("json", addTaskSkillSchema), (c) => {
+  const taskId = c.req.param("id");
+  const { skill_id } = c.req.valid("json");
+  if (!q.getTask(getDb(), taskId)) return c.json({ error: "task not found" }, 404);
+  if (!q.getSkill(getDb(), skill_id)) return c.json({ error: "skill not found" }, 404);
+  q.addTaskSkill(getDb(), taskId, skill_id, "direct");
+  const full = q.getTask(getDb(), taskId)!;
+  bus.publish({
+    type: "task.skill_added",
+    data: { boardId: full.board_id, taskId, skillId: skill_id, task: full },
+  });
+  return c.json(full, 201);
+});
+
+tasksRoute.delete("/:id/skills/:skillId", (c) => {
+  const taskId = c.req.param("id");
+  const skillId = c.req.param("skillId");
+  if (!q.getTask(getDb(), taskId)) return c.json({ error: "task not found" }, 404);
+  const origin = q.getTaskSkillOrigin(getDb(), taskId, skillId);
+  if (origin === null) return c.json({ error: "skill was not attached to task" }, 404);
+  if (origin !== "direct") {
+    return c.json(
+      { error: "Cannot remove role-inherited items. Remove the role instead." },
+      403
+    );
+  }
+  q.removeTaskSkill(getDb(), taskId, skillId);
+  const full = q.getTask(getDb(), taskId)!;
+  bus.publish({
+    type: "task.skill_removed",
+    data: { boardId: full.board_id, taskId, skillId, task: full },
+  });
+  return c.json(full);
+});
+
+tasksRoute.post("/:id/mcp_tools", zValidator("json", addTaskMcpToolSchema), (c) => {
+  const taskId = c.req.param("id");
+  const { mcp_tool_id } = c.req.valid("json");
+  if (!q.getTask(getDb(), taskId)) return c.json({ error: "task not found" }, 404);
+  if (!q.getMcpTool(getDb(), mcp_tool_id)) return c.json({ error: "mcp tool not found" }, 404);
+  q.addTaskMcpTool(getDb(), taskId, mcp_tool_id, "direct");
+  const full = q.getTask(getDb(), taskId)!;
+  bus.publish({
+    type: "task.mcp_tool_added",
+    data: { boardId: full.board_id, taskId, mcpToolId: mcp_tool_id, task: full },
+  });
+  return c.json(full, 201);
+});
+
+tasksRoute.delete("/:id/mcp_tools/:mcpToolId", (c) => {
+  const taskId = c.req.param("id");
+  const mcpToolId = c.req.param("mcpToolId");
+  if (!q.getTask(getDb(), taskId)) return c.json({ error: "task not found" }, 404);
+  const origin = q.getTaskMcpToolOrigin(getDb(), taskId, mcpToolId);
+  if (origin === null) return c.json({ error: "mcp tool was not attached to task" }, 404);
+  if (origin !== "direct") {
+    return c.json(
+      { error: "Cannot remove role-inherited items. Remove the role instead." },
+      403
+    );
+  }
+  q.removeTaskMcpTool(getDb(), taskId, mcpToolId);
+  const full = q.getTask(getDb(), taskId)!;
+  bus.publish({
+    type: "task.mcp_tool_removed",
+    data: { boardId: full.board_id, taskId, mcpToolId, task: full },
+  });
+  return c.json(full);
 });
 
 export default tasksRoute;

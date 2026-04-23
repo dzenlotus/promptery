@@ -27,15 +27,49 @@ export function useWebSocket(): void {
         case "task.deleted":
           qc.invalidateQueries({ queryKey: qk.tasks(evt.data.boardId) });
           break;
-        case "task.tag_added":
-        case "task.tag_removed":
-          // Task list contains tags, so invalidate all task lists.
+        case "task.role_changed":
+        case "task.prompt_added":
+        case "task.prompt_removed":
+        case "task.skill_added":
+        case "task.skill_removed":
+        case "task.mcp_tool_added":
+        case "task.mcp_tool_removed":
+          qc.setQueryData(qk.task(evt.data.taskId), evt.data.task);
+          qc.invalidateQueries({ queryKey: qk.tasks(evt.data.boardId) });
+          break;
+        case "prompt.created":
+        case "prompt.updated":
+        case "prompt.deleted":
+          qc.invalidateQueries({ queryKey: qk.prompts });
           qc.invalidateQueries({ queryKey: ["tasks"] });
           break;
-        case "tag.created":
-        case "tag.updated":
-        case "tag.deleted":
-          qc.invalidateQueries({ queryKey: ["tags"] });
+        case "skill.created":
+        case "skill.updated":
+        case "skill.deleted":
+          qc.invalidateQueries({ queryKey: qk.skills });
+          qc.invalidateQueries({ queryKey: ["tasks"] });
+          break;
+        case "mcp_tool.created":
+        case "mcp_tool.updated":
+        case "mcp_tool.deleted":
+          qc.invalidateQueries({ queryKey: qk.mcpTools });
+          qc.invalidateQueries({ queryKey: ["tasks"] });
+          break;
+        case "role.created":
+        case "role.updated":
+          qc.invalidateQueries({ queryKey: qk.roles });
+          if ("roleId" in evt.data) {
+            qc.invalidateQueries({ queryKey: qk.role(evt.data.roleId) });
+          }
+          qc.invalidateQueries({ queryKey: ["tasks"] });
+          break;
+        case "role.deleted":
+          qc.invalidateQueries({ queryKey: qk.roles });
+          qc.invalidateQueries({ queryKey: qk.role(evt.data.roleId) });
+          qc.invalidateQueries({ queryKey: ["tasks"] });
+          break;
+        case "role.relations_updated":
+          qc.setQueryData(qk.role(evt.data.roleId), evt.data.role);
           qc.invalidateQueries({ queryKey: ["tasks"] });
           break;
       }

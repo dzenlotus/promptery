@@ -5,11 +5,14 @@ import { Dialog } from "../ui/Dialog.js";
 import { Button } from "../ui/Button.js";
 import { Input } from "../ui/Input.js";
 import { MilkdownEditor } from "../editor/MilkdownEditor.js";
-import { RoleSelector } from "../tags/RoleSelector.js";
-import { TagSelector } from "../tags/TagSelector.js";
+import { RoleSelector } from "./RoleSelector.js";
+import { TaskPromptsEditor } from "./TaskPromptsEditor.js";
 import { api } from "../../lib/api.js";
 import { qk } from "../../lib/query.js";
-import type { Task, TaskFull } from "../../lib/types.js";
+import { usePrompts } from "../../hooks/usePrompts.js";
+import { useRoles, useRole } from "../../hooks/useRoles.js";
+import { useTask } from "../../hooks/useTasks.js";
+import type { Task } from "../../lib/types.js";
 
 type Props =
   | {
@@ -29,78 +32,119 @@ type Props =
       onClose: () => void;
     };
 
-interface TagState {
-  role: string | null;
-  skills: string[];
-  prompts: string[];
-  mcp: string[];
-}
-
-const EMPTY_TAGS: TagState = { role: null, skills: [], prompts: [], mcp: [] };
-
 function Field({
   label,
+  required,
   children,
 }: {
   label: string;
+  required?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <div className="grid gap-1.5">
       <label className="text-[10px] uppercase tracking-[0.1em] font-medium text-[var(--color-text-subtle)]">
         {label}
+        {required ? (
+          <span className="ml-0.5 text-[var(--color-danger)]">*</span>
+        ) : null}
       </label>
       {children}
     </div>
   );
 }
 
+function arraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
 export function TaskDialog(props: Props) {
   const { open, onClose, mode, boardId } = props;
   const qc = useQueryClient();
 
+  const { data: allPrompts = [] } = usePrompts();
+  const { data: allRoles = [] } = useRoles();
+
+  const editingId = mode === "edit" ? props.task.id : undefined;
+  const { data: loadedTask } = useTask(editingId);
+  const editTask = mode === "edit" ? (loadedTask ?? props.task) : null;
+
+  // --- Local staged state ---------------------------------------------------
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [tags, setTags] = useState<TagState>(EMPTY_TAGS);
+  const [localRoleId, setLocalRoleId] = useState<string | null>(null);
+  const [localDirectIds, setLocalDirectIds] = useState<string[]>([]);
   const [editorKey, setEditorKey] = useState(0);
   const [saving, setSaving] = useState(false);
 
-  // Seed form from task on open.
+  // Reset local state whenever the dialog opens or switches to a different
+  // task. We intentionally depend on loadedTask.updated_at as well so that a
+  // refetch after open picks up the server-side baseline — otherwise a stale
+  // snapshot passed in props.task would leave the dirty check comparing
+  // against outdated values.
   useEffect(() => {
     if (!open) return;
-    if (mode === "edit") {
-      setTitle(props.task.title);
-      setDescription(props.task.description);
-      const full = qc.getQueryData<TaskFull>(["task", props.task.id]);
-      setTags(kindsFromTags(full?.tags ?? props.task.tags));
-      // Fetch full task to get descriptions on tags too (fire & forget).
-      api.tasks
-        .get(props.task.id)
-        .then((t) => {
-          qc.setQueryData(["task", t.id], t);
-          setTags(kindsFromTags(t.tags));
-        })
-        .catch(() => {
-          /* no-op */
-        });
-    } else {
+    if (mode === "edit" && editTask) {
+      setTitle(editTask.title);
+      setDescription(editTask.description);
+      setLocalRoleId(editTask.role_id ?? null);
+      setLocalDirectIds(
+        editTask.prompts.filter((p) => p.origin === "direct").map((p) => p.id)
+      );
+    } else if (mode === "create") {
       setTitle("");
       setDescription("");
-      setTags(EMPTY_TAGS);
+      setLocalRoleId(null);
+      setLocalDirectIds([]);
     }
     setEditorKey((k) => k + 1);
-    // Disable deps rule — we intentionally re-seed only on open transitions.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, mode, mode === "edit" ? props.task?.id : null]);
+  }, [open, mode, editingId, editTask?.updated_at]);
 
-  const disabled = !title.trim() || saving;
+  // --- Derived baselines for dirty check ------------------------------------
+  const baseline = useMemo(() => {
+    if (mode === "edit" && editTask) {
+      return {
+        title: editTask.title,
+        description: editTask.description,
+        roleId: editTask.role_id ?? null,
+        directIds: editTask.prompts
+          .filter((p) => p.origin === "direct")
+          .map((p) => p.id),
+      };
+    }
+    return { title: "", description: "", roleId: null, directIds: [] as string[] };
+  }, [mode, editTask]);
 
-  const selectedIds = useMemo<string[]>(() => {
-    const ids = [...tags.skills, ...tags.prompts, ...tags.mcp];
-    if (tags.role) ids.push(tags.role);
-    return ids;
-  }, [tags]);
+  // --- Inherited prompts preview --------------------------------------------
+  // Fetch the selected role's relations so switching the role (in either
+  // create or edit mode) surfaces its default prompts as inherited chips
+  // immediately — without having to close and reopen the dialog.
+  const { data: selectedRoleFull } = useRole(localRoleId);
+  const selectedRoleName =
+    allRoles.find((r) => r.id === localRoleId)?.name ?? null;
+  const inheritedPrompts = selectedRoleFull?.prompts ?? [];
 
+  // --- Dirty + save guards --------------------------------------------------
+  const isDirty = useMemo(() => {
+    if (mode === "create") {
+      // Save button is really a "Create" button here — always enabled (pending
+      // title validation) since nothing has been persisted yet.
+      return title.trim().length > 0;
+    }
+    return (
+      title !== baseline.title ||
+      description !== baseline.description ||
+      localRoleId !== baseline.roleId ||
+      !arraysEqual(localDirectIds, baseline.directIds)
+    );
+  }, [mode, title, description, localRoleId, localDirectIds, baseline]);
+
+  const disabled = !title.trim() || saving || (mode === "edit" && !isDirty);
+
+  // --- Submit ---------------------------------------------------------------
   const submit = async () => {
     const trimmed = title.trim();
     if (!trimmed) return;
@@ -112,26 +156,44 @@ export function TaskDialog(props: Props) {
           title: trimmed,
           description,
         });
-        // Attach tags in parallel.
-        await Promise.all(selectedIds.map((id) => api.tasks.addTag(created.id, id)));
+        if (localRoleId) {
+          await api.tasks.setRole(created.id, localRoleId);
+        }
+        // Attachments run sequentially to preserve insertion order.
+        for (const pid of localDirectIds) {
+          await api.tasks.addPrompt(created.id, pid);
+        }
         toast.success("Task created");
       } else {
-        const original = props.task;
-        const originalIds = new Set(original.tags.map((t) => t.id));
-        const nextIds = new Set(selectedIds);
-
-        const toAdd = selectedIds.filter((id) => !originalIds.has(id));
-        const toRemove = [...originalIds].filter((id) => !nextIds.has(id));
-
-        await Promise.all([
-          api.tasks.update(original.id, { title: trimmed, description }),
-          ...toAdd.map((id) => api.tasks.addTag(original.id, id)),
-          ...toRemove.map((id) => api.tasks.removeTag(original.id, id)),
-        ]);
-        toast.success("Task updated");
+        const id = props.task.id;
+        const patch: { title?: string; description?: string } = {};
+        if (trimmed !== baseline.title) patch.title = trimmed;
+        if (description !== baseline.description) patch.description = description;
+        if (Object.keys(patch).length > 0) {
+          await api.tasks.update(id, patch);
+        }
+        if (localRoleId !== baseline.roleId) {
+          await api.tasks.setRole(id, localRoleId);
+        }
+        const origSet = new Set(baseline.directIds);
+        const localSet = new Set(localDirectIds);
+        for (const removed of baseline.directIds) {
+          if (!localSet.has(removed)) {
+            await api.tasks.removePrompt(id, removed);
+          }
+        }
+        for (const added of localDirectIds) {
+          if (!origSet.has(added)) {
+            await api.tasks.addPrompt(id, added);
+          }
+        }
+        // TODO: persist ordering when the backend exposes a reorder endpoint.
+        // Today we accept visual ordering within the session; server-side
+        // position is driven by insertion order of addPrompt calls.
+        toast.success("Task saved");
       }
-
       qc.invalidateQueries({ queryKey: qk.tasks(boardId) });
+      if (editingId) qc.invalidateQueries({ queryKey: qk.task(editingId) });
       onClose();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save task");
@@ -140,7 +202,7 @@ export function TaskDialog(props: Props) {
     }
   };
 
-  const dialogTitle = mode === "create" ? "Create task" : `Edit task #${props.task?.number}`;
+  const dialogTitle = mode === "create" ? "Create task" : `Edit task #${props.task.number}`;
 
   return (
     <Dialog
@@ -148,6 +210,7 @@ export function TaskDialog(props: Props) {
       onOpenChange={(o) => !o && onClose()}
       title={dialogTitle}
       size="lg"
+      data-testid={`task-dialog-${mode}`}
       footer={
         <>
           <Button variant="ghost" onClick={onClose} disabled={saving}>
@@ -159,10 +222,12 @@ export function TaskDialog(props: Props) {
         </>
       }
     >
-      <div className="grid gap-4 py-2">
-        <Field label="Title">
+      <div className="grid gap-5 py-2">
+        <Field label="Title" required>
           <Input
             autoFocus
+            required
+            aria-required="true"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             onKeyDown={(e) => {
@@ -174,41 +239,24 @@ export function TaskDialog(props: Props) {
 
         <Field label="Role">
           <RoleSelector
-            selectedTagId={tags.role}
-            onChange={(id) => setTags((s) => ({ ...s, role: id }))}
-            allowCreate
-          />
-        </Field>
-
-        <Field label="Skills">
-          <TagSelector
-            kind="skill"
-            selectedTagIds={tags.skills}
-            onChange={(ids) => setTags((s) => ({ ...s, skills: ids }))}
-            placeholder="Add skills…"
-            allowCreate
+            selectedRoleId={localRoleId}
+            onChange={setLocalRoleId}
+            roles={allRoles}
           />
         </Field>
 
         <Field label="Prompts">
-          <TagSelector
-            kind="prompt"
-            selectedTagIds={tags.prompts}
-            onChange={(ids) => setTags((s) => ({ ...s, prompts: ids }))}
-            placeholder="Add prompts…"
-            allowCreate
+          <TaskPromptsEditor
+            allPrompts={allPrompts}
+            inheritedItems={inheritedPrompts}
+            directIds={localDirectIds}
+            onDirectChange={setLocalDirectIds}
+            roleName={selectedRoleName}
           />
         </Field>
 
-        <Field label="MCP tools">
-          <TagSelector
-            kind="mcp"
-            selectedTagIds={tags.mcp}
-            onChange={(ids) => setTags((s) => ({ ...s, mcp: ids }))}
-            placeholder="Add MCP tools…"
-            allowCreate
-          />
-        </Field>
+        {/* TODO: Skills field — add when skills feature ships */}
+        {/* TODO: MCP tools field — add when MCP tools feature ships */}
 
         <Field label="Description">
           <MilkdownEditor key={editorKey} value={description} onChange={setDescription} />
@@ -216,18 +264,4 @@ export function TaskDialog(props: Props) {
       </div>
     </Dialog>
   );
-}
-
-function kindsFromTags(taskTags: Task["tags"] | TaskFull["tags"]): TagState {
-  const out: TagState = { role: null, skills: [], prompts: [], mcp: [] };
-  for (const t of taskTags) {
-    // The lite tag shape doesn't carry kind; we rely on the full-task fetch
-    // to populate the form. This branch handles whichever shape arrived.
-    const kind = (t as { kind?: string }).kind;
-    if (kind === "role") out.role = t.id;
-    else if (kind === "skill") out.skills.push(t.id);
-    else if (kind === "prompt") out.prompts.push(t.id);
-    else if (kind === "mcp") out.mcp.push(t.id);
-  }
-  return out;
 }

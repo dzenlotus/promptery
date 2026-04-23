@@ -29,6 +29,7 @@ export function BoardDeleteDialog({ boardId, boardName, open, onClose, onDeleted
       title="Delete board?"
       description={`"${boardName}" and all of its tasks will be permanently removed.`}
       size="sm"
+      data-testid="board-delete-dialog"
       footer={
         <>
           <Button variant="ghost" onClick={onClose} disabled={isPending}>

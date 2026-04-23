@@ -12,8 +12,7 @@ interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const base =
   "inline-flex items-center justify-center gap-2 rounded-md font-medium select-none " +
-  "transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed " +
-  "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-ring)]";
+  "transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed";
 
 const sizes: Record<Size, string> = {
   sm: "h-7 px-3 text-[12px]",

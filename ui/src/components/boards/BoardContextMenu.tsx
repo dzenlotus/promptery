@@ -17,7 +17,12 @@ export function BoardContextMenu({ onRename, onDelete }: Props) {
   return (
     <DropdownMenu>
       <DropdownTrigger asChild>
-        <IconButton label="Board actions" size="sm" onClick={(e) => e.stopPropagation()}>
+        <IconButton
+          label="Board actions"
+          size="sm"
+          data-testid="board-context-menu-trigger"
+          onClick={(e) => e.stopPropagation()}
+        >
           <MoreHorizontal size={14} />
         </IconButton>
       </DropdownTrigger>

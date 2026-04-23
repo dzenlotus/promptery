@@ -26,6 +26,7 @@ export function BoardRow({ index, board, onAfterDelete }: Props) {
       <div
         role="button"
         tabIndex={0}
+        data-testid={`board-row-${board.id}`}
         onClick={() => setLocation(ROUTES.board(board.id))}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
@@ -36,7 +37,6 @@ export function BoardRow({ index, board, onAfterDelete }: Props) {
         className={cn(
           "group grid grid-cols-[24px_1fr_24px] items-center gap-2 h-9 px-3 rounded-md cursor-pointer",
           "transition-colors duration-150",
-          "focus-visible:outline-none focus-visible:shadow-[0_0_0_3px_var(--color-accent-ring)]",
           active
             ? "bg-[var(--color-accent-soft)] text-[var(--color-text)]"
             : "hover:bg-[var(--hover-overlay)] text-[var(--color-text)]"

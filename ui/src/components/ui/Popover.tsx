@@ -8,6 +8,7 @@ export const PopoverAnchor = RadixPopover.Anchor;
 
 type ContentProps = ComponentPropsWithoutRef<typeof RadixPopover.Content> & {
   children: ReactNode;
+  "data-testid"?: string;
 };
 
 export function PopoverContent({
@@ -15,6 +16,7 @@ export function PopoverContent({
   className,
   align = "start",
   sideOffset = 6,
+  "data-testid": testId = "popover",
   ...props
 }: ContentProps) {
   return (
@@ -22,8 +24,11 @@ export function PopoverContent({
       <RadixPopover.Content
         align={align}
         sideOffset={sideOffset}
+        data-testid={testId}
         className={cn(
-          "liquid-glass-strong gradient-border rounded-xl p-1 shadow-[var(--shadow-lg)] z-50",
+          // Radius formula: inner items are rounded-md (10px) + Command.List
+          // sits inside p-1 (4px) → outer = 10 + 4 = 14px = rounded-lg.
+          "liquid-glass-strong gradient-border rounded-lg p-1 shadow-[var(--shadow-lg)] z-50",
           "min-w-[var(--radix-popover-trigger-width)] max-h-[360px]",
           "animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out",
           className

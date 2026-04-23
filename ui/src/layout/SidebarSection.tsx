@@ -12,8 +12,12 @@ interface Props {
  * Header is h-11 whether or not an `action` is provided.
  */
 export function SidebarSection({ label, action, children }: Props) {
+  const slug = label.toLowerCase().replace(/\s+/g, "-");
   return (
-    <div className="grid grid-rows-[auto_1fr] min-h-0 h-full">
+    <div
+      data-testid={`sidebar-section-${slug}`}
+      className="grid grid-rows-[auto_1fr] min-h-0 h-full"
+    >
       <div className="grid grid-cols-[1fr_auto] items-center gap-2 px-4 h-11">
         <h3 className="text-[10px] uppercase tracking-[0.1em] text-[var(--color-text-subtle)]">
           {label}

@@ -13,6 +13,42 @@ CREATE TABLE IF NOT EXISTS columns (
   created_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS prompts (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  content TEXT NOT NULL DEFAULT '',
+  color TEXT DEFAULT '#888',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS skills (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  content TEXT NOT NULL DEFAULT '',
+  color TEXT DEFAULT '#888',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS mcp_tools (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  content TEXT NOT NULL DEFAULT '',
+  color TEXT DEFAULT '#888',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS roles (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL UNIQUE,
+  content TEXT NOT NULL DEFAULT '',
+  color TEXT DEFAULT '#888',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY,
   board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
@@ -21,27 +57,75 @@ CREATE TABLE IF NOT EXISTS tasks (
   title TEXT NOT NULL,
   description TEXT DEFAULT '',
   position REAL NOT NULL,
+  role_id TEXT REFERENCES roles(id) ON DELETE SET NULL,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS tags (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL UNIQUE,
-  description TEXT DEFAULT '',
-  color TEXT DEFAULT '#888',
-  kind TEXT NOT NULL DEFAULT 'skill' CHECK (kind IN ('role', 'skill', 'prompt', 'mcp')),
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
+CREATE TABLE IF NOT EXISTS role_prompts (
+  role_id TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+  prompt_id TEXT NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
+  position REAL NOT NULL DEFAULT 0,
+  PRIMARY KEY (role_id, prompt_id)
 );
 
-CREATE TABLE IF NOT EXISTS task_tags (
+CREATE TABLE IF NOT EXISTS role_skills (
+  role_id TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+  skill_id TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+  position REAL NOT NULL DEFAULT 0,
+  PRIMARY KEY (role_id, skill_id)
+);
+
+CREATE TABLE IF NOT EXISTS role_mcp_tools (
+  role_id TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+  mcp_tool_id TEXT NOT NULL REFERENCES mcp_tools(id) ON DELETE CASCADE,
+  position REAL NOT NULL DEFAULT 0,
+  PRIMARY KEY (role_id, mcp_tool_id)
+);
+
+CREATE TABLE IF NOT EXISTS task_prompts (
   task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-  tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
-  PRIMARY KEY (task_id, tag_id)
+  prompt_id TEXT NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
+  origin TEXT NOT NULL DEFAULT 'direct',
+  position REAL NOT NULL DEFAULT 0,
+  PRIMARY KEY (task_id, prompt_id)
+);
+
+CREATE TABLE IF NOT EXISTS task_skills (
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  skill_id TEXT NOT NULL REFERENCES skills(id) ON DELETE CASCADE,
+  origin TEXT NOT NULL DEFAULT 'direct',
+  position REAL NOT NULL DEFAULT 0,
+  PRIMARY KEY (task_id, skill_id)
+);
+
+CREATE TABLE IF NOT EXISTS task_mcp_tools (
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  mcp_tool_id TEXT NOT NULL REFERENCES mcp_tools(id) ON DELETE CASCADE,
+  origin TEXT NOT NULL DEFAULT 'direct',
+  position REAL NOT NULL DEFAULT 0,
+  PRIMARY KEY (task_id, mcp_tool_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_tasks_board_column ON tasks(board_id, column_id, position);
-CREATE INDEX IF NOT EXISTS idx_task_tags_task ON task_tags(task_id);
-CREATE INDEX IF NOT EXISTS idx_task_tags_tag ON task_tags(tag_id);
-CREATE INDEX IF NOT EXISTS idx_tags_kind ON tags(kind);
+-- idx_tasks_role is created in migrations.ts after the role_id ALTER on legacy DBs
+CREATE INDEX IF NOT EXISTS idx_role_prompts_role ON role_prompts(role_id);
+CREATE INDEX IF NOT EXISTS idx_role_skills_role ON role_skills(role_id);
+CREATE INDEX IF NOT EXISTS idx_role_mcp_tools_role ON role_mcp_tools(role_id);
+CREATE INDEX IF NOT EXISTS idx_task_prompts_task ON task_prompts(task_id);
+CREATE INDEX IF NOT EXISTS idx_task_prompts_origin ON task_prompts(task_id, origin);
+CREATE INDEX IF NOT EXISTS idx_task_skills_task ON task_skills(task_id);
+CREATE INDEX IF NOT EXISTS idx_task_skills_origin ON task_skills(task_id, origin);
+CREATE INDEX IF NOT EXISTS idx_task_mcp_tools_task ON task_mcp_tools(task_id);
+CREATE INDEX IF NOT EXISTS idx_task_mcp_tools_origin ON task_mcp_tools(task_id, origin);
+
+-- Defensive net for direct SQL DELETE on roles: strips any task_* rows that
+-- were inherited from the role. deleteRole() in TS does the same thing
+-- before removing the row, so this trigger is belt-and-suspenders.
+CREATE TRIGGER IF NOT EXISTS cleanup_role_origin_on_role_delete
+AFTER DELETE ON roles
+BEGIN
+  DELETE FROM task_prompts WHERE origin = 'role:' || OLD.id;
+  DELETE FROM task_skills WHERE origin = 'role:' || OLD.id;
+  DELETE FROM task_mcp_tools WHERE origin = 'role:' || OLD.id;
+END;

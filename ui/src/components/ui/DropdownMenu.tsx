@@ -11,6 +11,7 @@ interface ContentProps {
   align?: "start" | "center" | "end";
   sideOffset?: number;
   className?: string;
+  "data-testid"?: string;
 }
 
 export function DropdownContent({
@@ -18,14 +19,17 @@ export function DropdownContent({
   align = "end",
   sideOffset = 6,
   className,
+  "data-testid": testId = "dropdown-menu",
 }: ContentProps) {
   return (
     <RadixDropdown.Portal>
       <RadixDropdown.Content
         align={align}
         sideOffset={sideOffset}
+        data-testid={testId}
         className={cn(
-          "min-w-[180px] rounded-xl liquid-glass-strong gradient-border p-1.5",
+          // Radius formula: inner items rounded-md (10px) + p-1 (4px) → outer 14 = rounded-lg.
+          "min-w-[180px] rounded-lg liquid-glass-strong gradient-border p-1",
           "shadow-[var(--shadow-lg)]",
           "animate-in fade-in-0 zoom-in-95 data-[state=closed]:animate-out",
           className

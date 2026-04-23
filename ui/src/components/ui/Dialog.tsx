@@ -13,6 +13,7 @@ interface Props {
   footer?: ReactNode;
   size?: "sm" | "md" | "lg";
   lockOutsideClick?: boolean;
+  "data-testid"?: string;
 }
 
 /**
@@ -29,6 +30,7 @@ export function Dialog({
   footer,
   size = "md",
   lockOutsideClick = true,
+  "data-testid": testId = "dialog",
 }: Props) {
   const width = { sm: "max-w-[420px]", md: "max-w-[560px]", lg: "max-w-[680px]" }[size];
   return (
@@ -42,10 +44,11 @@ export function Dialog({
           className="fixed inset-0 z-50 grid place-items-center p-4 focus:outline-none"
         >
           <div
+            data-testid={testId}
             className={cn(
               "w-full",
               width,
-              "liquid-glass-strong gradient-border rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.55)]",
+              "liquid-glass-opaque gradient-border rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.55)]",
               "max-h-[86vh] grid grid-rows-[auto_1fr_auto]"
             )}
           >

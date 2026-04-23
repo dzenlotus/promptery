@@ -6,7 +6,11 @@ import { logger } from "hono/logger";
 import boardsRoute from "./routes/boards.js";
 import { boardColumnsRoute, columnsRoute } from "./routes/columns.js";
 import { boardTasksRoute, tasksRoute } from "./routes/tasks.js";
-import tagsRoute from "./routes/tags.js";
+import promptsRoute from "./routes/prompts.js";
+import skillsRoute from "./routes/skills.js";
+import mcpToolsRoute from "./routes/mcpTools.js";
+import rolesRoute from "./routes/roles.js";
+import bridgesRoute from "./routes/bridges.js";
 import { errorHandler } from "./middleware/error.js";
 import { handleWsClose, handleWsOpen } from "./events/websocket.js";
 import { findFreePort } from "../lib/port.js";
@@ -24,7 +28,11 @@ export function createApp() {
   app.route("/api/boards", boardTasksRoute);
   app.route("/api/columns", columnsRoute);
   app.route("/api/tasks", tasksRoute);
-  app.route("/api/tags", tagsRoute);
+  app.route("/api/prompts", promptsRoute);
+  app.route("/api/skills", skillsRoute);
+  app.route("/api/mcp_tools", mcpToolsRoute);
+  app.route("/api/roles", rolesRoute);
+  app.route("/api/bridges", bridgesRoute);
 
   app.get(
     "/ws",

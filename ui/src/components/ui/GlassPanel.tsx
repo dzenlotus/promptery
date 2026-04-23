@@ -24,10 +24,14 @@ export function GlassPanel({
     variant === "sidebar"
       ? "bg-[var(--color-surface)] gradient-border shadow-[var(--shadow-md)]"
       : variant === "modal-glass"
-        ? "liquid-glass-strong gradient-border shadow-[var(--shadow-lg)]"
+        ? "liquid-glass-opaque gradient-border shadow-[var(--shadow-lg)]"
         : "bg-transparent solid-border";
   return (
-    <div className={cn(variantCls, radiusCls, className)} {...props}>
+    <div
+      data-testid={(props as { "data-testid"?: string })["data-testid"] ?? "glass-panel"}
+      className={cn(variantCls, radiusCls, className)}
+      {...props}
+    >
       {children}
     </div>
   );

@@ -1,4 +1,5 @@
 import type { Database } from "better-sqlite3";
+import { readFileSync } from "node:fs";
 import { nanoid } from "nanoid";
 import { DEFAULT_COLUMN_NAMES } from "./queries/boards.js";
 
@@ -11,12 +12,12 @@ import { DEFAULT_COLUMN_NAMES } from "./queries/boards.js";
  * `_migrations` so subsequent startups skip it.
  *
  * The paired SQL reference files live in `src/db/migrations/*.sql` for docs
- * and future DBA work, but aren't loaded at runtime — we need mild conditional
- * logic (legacy column detection) that is awkward in pure SQL.
+ * and future DBA work, and may be loaded at runtime by their JS counterpart.
  */
 export function runMigrations(db: Database): void {
   ensureMigrationsTable(db);
   runMigration(db, "002_add_tag_kind", apply002AddTagKind);
+  runMigration(db, "004_refactor_tags_to_typed_entities", apply004RefactorTags);
   backfillDefaultColumnsForEmptyBoards(db);
 }
 
@@ -44,7 +45,18 @@ function runMigration(db: Database, name: string, apply: (db: Database) => void)
   console.log(`[promptery] applied migration: ${name}`);
 }
 
+function tableExists(db: Database, name: string): boolean {
+  const row = db
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(name);
+  return !!row;
+}
+
 function apply002AddTagKind(db: Database): void {
+  // Tolerate fresh installs where the new schema has already dropped `tags`:
+  // 002 then becomes a no-op recorded for bookkeeping only.
+  if (!tableExists(db, "tags")) return;
+
   const cols = db.prepare("PRAGMA table_info(tags)").all() as { name: string }[];
   const hasKind = cols.some((c) => c.name === "kind");
 
@@ -54,15 +66,124 @@ function apply002AddTagKind(db: Database): void {
          CHECK (kind IN ('role', 'skill', 'prompt', 'mcp'))`
     );
   } else {
-    // Legacy installs from an earlier idempotent ALTER (DEFAULT 'tag'). The
-    // column is already present but may carry values the new CHECK would
-    // reject. Normalise them before any future CHECK enforcement kicks in.
     db.exec(
       "UPDATE tags SET kind = 'skill' WHERE kind NOT IN ('role', 'skill', 'prompt', 'mcp')"
     );
   }
 
   db.exec("CREATE INDEX IF NOT EXISTS idx_tags_kind ON tags(kind)");
+}
+
+/**
+ * Apply 004: create the four typed primitive tables, add tasks.role_id, and
+ * migrate any data sitting in legacy `tags` / `task_tags` into the new shape.
+ *
+ * Runs inside the transaction supplied by runMigration. Idempotent: if the
+ * legacy tables are already gone (fresh install, or a prior run) only the
+ * schema-creation half executes.
+ */
+function apply004RefactorTags(db: Database): void {
+  const sqlUrl = new URL("./migrations/004_refactor_tags_to_typed_entities.sql", import.meta.url);
+  const sql = readFileSync(sqlUrl, "utf-8");
+  db.exec(sql);
+
+  // Add tasks.role_id only if the column is missing (older schemas).
+  const taskCols = db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[];
+  if (!taskCols.some((c) => c.name === "role_id")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN role_id TEXT REFERENCES roles(id) ON DELETE SET NULL");
+  }
+  db.exec("CREATE INDEX IF NOT EXISTS idx_tasks_role ON tasks(role_id)");
+
+  migrateTagsData(db);
+}
+
+/**
+ * Move rows from legacy `tags` / `task_tags` into the new typed tables.
+ *
+ * Strategy: for each old tag, INSERT-OR-IGNORE into the matching typed table
+ * preserving id / name / color / timestamps, mapping old `description` to the
+ * new `content` field. For each task_tag link, look up the tag's kind and
+ * either set tasks.role_id (kind='role') or insert a `direct`-origin row
+ * into the matching task_* link table.
+ *
+ * INSERT OR IGNORE protects against re-runs and the rare case where a fresh
+ * primitive with the same name was created in the new schema before the
+ * migration completes.
+ */
+function migrateTagsData(db: Database): void {
+  if (!tableExists(db, "tags")) return;
+
+  type LegacyTag = {
+    id: string;
+    name: string;
+    description: string | null;
+    color: string | null;
+    kind: string;
+    created_at: number;
+    updated_at: number;
+  };
+
+  const legacyTags = db.prepare("SELECT * FROM tags").all() as LegacyTag[];
+  const tagsById = new Map<string, LegacyTag>();
+  for (const t of legacyTags) tagsById.set(t.id, t);
+
+  const insertByKind: Record<string, string> = {
+    prompt: "INSERT OR IGNORE INTO prompts (id, name, content, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+    skill: "INSERT OR IGNORE INTO skills (id, name, content, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+    mcp: "INSERT OR IGNORE INTO mcp_tools (id, name, content, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+    role: "INSERT OR IGNORE INTO roles (id, name, content, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+  };
+
+  for (const tag of legacyTags) {
+    const sql = insertByKind[tag.kind];
+    if (!sql) continue; // unknown kind — skip rather than fail the whole migration
+    db.prepare(sql).run(
+      tag.id,
+      tag.name,
+      tag.description ?? "",
+      tag.color ?? "#888",
+      tag.created_at,
+      tag.updated_at
+    );
+  }
+
+  if (tableExists(db, "task_tags")) {
+    type TaskTagRow = { task_id: string; tag_id: string };
+    const links = db.prepare("SELECT * FROM task_tags").all() as TaskTagRow[];
+
+    const insertTaskPrompt = db.prepare(
+      "INSERT OR IGNORE INTO task_prompts (task_id, prompt_id, origin, position) VALUES (?, ?, 'direct', 0)"
+    );
+    const insertTaskSkill = db.prepare(
+      "INSERT OR IGNORE INTO task_skills (task_id, skill_id, origin, position) VALUES (?, ?, 'direct', 0)"
+    );
+    const insertTaskMcp = db.prepare(
+      "INSERT OR IGNORE INTO task_mcp_tools (task_id, mcp_tool_id, origin, position) VALUES (?, ?, 'direct', 0)"
+    );
+    const setRole = db.prepare("UPDATE tasks SET role_id = ? WHERE id = ?");
+
+    for (const link of links) {
+      const tag = tagsById.get(link.tag_id);
+      if (!tag) continue;
+      switch (tag.kind) {
+        case "prompt":
+          insertTaskPrompt.run(link.task_id, link.tag_id);
+          break;
+        case "skill":
+          insertTaskSkill.run(link.task_id, link.tag_id);
+          break;
+        case "mcp":
+          insertTaskMcp.run(link.task_id, link.tag_id);
+          break;
+        case "role":
+          setRole.run(link.tag_id, link.task_id);
+          break;
+      }
+    }
+    db.exec("DROP TABLE task_tags");
+  }
+
+  db.exec("DROP TABLE tags");
 }
 
 /**

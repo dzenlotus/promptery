@@ -3,21 +3,28 @@ export const ROUTES = {
   home: "/",
   board: (id: string) => `/board/${id}`,
   roles: "/roles",
-  tags: "/tags",
+  prompts: "/prompts",
   skills: "/skills",
   mcp: "/mcp",
   settings: "/settings",
 } as const;
 
-export type TabId = "kanban" | "roles" | "tags" | "skills" | "mcp" | "settings";
+export type TabId = "kanban" | "roles" | "prompts" | "skills" | "mcp" | "settings";
 
 /** Tab order drives direction-of-travel animations. */
-export const TAB_ORDER: TabId[] = ["kanban", "roles", "tags", "skills", "mcp", "settings"];
+export const TAB_ORDER: TabId[] = [
+  "kanban",
+  "roles",
+  "prompts",
+  "skills",
+  "mcp",
+  "settings",
+];
 
 export function locationToTab(location: string): TabId {
   if (location === "/" || location.startsWith("/board/")) return "kanban";
   if (location.startsWith("/roles")) return "roles";
-  if (location.startsWith("/tags")) return "tags";
+  if (location.startsWith("/prompts")) return "prompts";
   if (location.startsWith("/skills")) return "skills";
   if (location.startsWith("/mcp")) return "mcp";
   if (location.startsWith("/settings")) return "settings";
@@ -34,8 +41,8 @@ export function hrefForTab(tab: TabId): string {
       return ROUTES.home;
     case "roles":
       return ROUTES.roles;
-    case "tags":
-      return ROUTES.tags;
+    case "prompts":
+      return ROUTES.prompts;
     case "skills":
       return ROUTES.skills;
     case "mcp":

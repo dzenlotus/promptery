@@ -11,6 +11,14 @@ export function useTasks(boardId: string | null | undefined) {
   });
 }
 
+export function useTask(taskId: string | null | undefined) {
+  return useQuery({
+    queryKey: qk.task(taskId ?? ""),
+    queryFn: () => api.tasks.get(taskId as string),
+    enabled: Boolean(taskId),
+  });
+}
+
 export function useCreateTask(boardId: string) {
   const qc = useQueryClient();
   return useMutation({
@@ -26,8 +34,9 @@ export function useUpdateTask(boardId: string) {
       api.tasks.update(id, patch),
     onSuccess: (updated: Task) => {
       qc.setQueryData<Task[]>(qk.tasks(boardId), (old) =>
-        old?.map((t) => (t.id === updated.id ? { ...t, ...updated, tags: t.tags } : t)) ?? []
+        old?.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)) ?? []
       );
+      qc.setQueryData(qk.task(updated.id), updated);
     },
   });
 }
@@ -54,9 +63,6 @@ export function useMoveTask(boardId: string) {
       columnId: string;
       position: number;
     }) => api.tasks.move(id, columnId, position),
-    // Optimistic cache update happens in KanbanBoard before mutate(); we skip
-    // onSuccess invalidation so the card doesn't flicker through a refetch.
-    // The WS `task.moved` broadcast syncs other tabs; failures roll back here.
     onError: () => qc.invalidateQueries({ queryKey: qk.tasks(boardId) }),
   });
 }

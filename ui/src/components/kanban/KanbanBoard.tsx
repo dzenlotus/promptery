@@ -245,7 +245,7 @@ export function KanbanBoard({ boardId, columns, tasks }: Props) {
       onDragEnd={onDragEnd}
       onDragCancel={onDragCancel}
     >
-      <div className="grid grid-cols-4 gap-4 h-full min-h-0">
+      <div data-testid="kanban-board" className="grid grid-cols-4 gap-4 h-full min-h-0">
         {columns.map((c) => (
           <KanbanColumn key={c.id} boardId={boardId} column={c} tasks={grouped[c.id] ?? []} />
         ))}

@@ -19,6 +19,7 @@ export function TaskDeleteDialog({ boardId, taskId, taskTitle, open, onClose }: 
       title="Delete task?"
       description={`"${taskTitle}" will be permanently removed.`}
       size="sm"
+      data-testid="task-delete-dialog"
       footer={
         <>
           <Button variant="ghost" onClick={onClose} disabled={isPending}>

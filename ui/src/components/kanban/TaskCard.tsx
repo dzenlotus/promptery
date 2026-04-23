@@ -5,7 +5,7 @@ import { Pencil, Trash2 } from "lucide-react";
 import type { Task } from "../../lib/types.js";
 import { cn } from "../../lib/cn.js";
 import { IconButton } from "../ui/IconButton.js";
-import { TagChip } from "../tags/TagChip.js";
+import { Chip } from "../ui/Chip.js";
 import { TaskDialog } from "../tasks/TaskDialog.js";
 import { TaskDeleteDialog } from "../tasks/TaskDeleteDialog.js";
 
@@ -30,18 +30,21 @@ export function TaskCard({ task, boardId, dragOverlay }: Props) {
     opacity: isDragging && !dragOverlay ? 0 : 1,
   };
 
-  const role = task.tags.find((t) => t.kind === "role");
-  const nonRoleCount = task.tags.filter((t) => t.kind !== "role").length;
   const plainDesc = task.description
     .replace(/[#*`>\-\n]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+
+  const extrasCount =
+    task.prompts.length + task.skills.length + task.mcp_tools.length;
 
   return (
     <>
       <div
         ref={setNodeRef}
         style={style}
+        data-testid={`task-card-${task.id}`}
+        data-task-number={task.number}
         {...attributes}
         {...listeners}
         onDoubleClick={() => setEditOpen(true)}
@@ -85,16 +88,23 @@ export function TaskCard({ task, boardId, dragOverlay }: Props) {
         {plainDesc ? (
           <p className="text-[12px] text-[var(--color-text-muted)] line-clamp-3">{plainDesc}</p>
         ) : null}
-        {(role || nonRoleCount > 0) && (
+        {task.role || extrasCount > 0 ? (
           <div className="flex items-center gap-1.5 mt-1">
-            {role ? <TagChip tag={role} size="sm" /> : null}
-            {nonRoleCount > 0 ? (
+            {task.role ? (
+              <Chip
+                name={task.role.name}
+                color={task.role.color}
+                size="sm"
+                data-testid={`task-card-role-${task.role.id}`}
+              />
+            ) : null}
+            {extrasCount > 0 ? (
               <span className="text-[10px] tabular-nums text-[var(--color-text-subtle)]">
-                +{nonRoleCount} tag{nonRoleCount === 1 ? "" : "s"}
+                +{extrasCount}
               </span>
             ) : null}
           </div>
-        )}
+        ) : null}
       </div>
 
       <TaskDialog

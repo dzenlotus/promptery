@@ -37,6 +37,7 @@ export function BoardRenameDialog({ boardId, currentName, open, onClose }: Props
       onOpenChange={(o) => !o && onClose()}
       title="Rename board"
       size="sm"
+      data-testid="board-rename-dialog"
       footer={
         <>
           <Button variant="ghost" onClick={onClose} disabled={isPending}>
