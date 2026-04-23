@@ -77,7 +77,11 @@ export function RoleSelector({ selectedRoleId, onChange, roles }: Props) {
             <Command.Empty className="px-3 py-3 text-[12px] text-[var(--color-text-subtle)]">
               {roles.length === 0 ? "No roles yet. Create one in the Roles view." : "No matches"}
             </Command.Empty>
-            <div className="flex flex-wrap gap-1.5 px-2 pb-2">
+            {/* cmdk-group-items attr is load-bearing — see bug #27.
+                Without it the search-reorder calls appendChild(null) on first
+                keystroke because cmdk can't find a group wrapper around the
+                items and then fails the fallback selector too. */}
+            <div cmdk-group-items="" className="flex flex-wrap gap-1.5 px-2 pb-2">
               {roles.map((r) => (
                 // Feedback lives on the chip itself, not on a halo behind it:
                 // a halo on `Command.Item` didn't align with the chip's
@@ -87,7 +91,8 @@ export function RoleSelector({ selectedRoleId, onChange, roles }: Props) {
                 // to the chip so the focus ring cmdk doesn't render its own.
                 <Command.Item
                   key={r.id}
-                  value={r.name}
+                  value={r.id}
+                  keywords={[r.name]}
                   onSelect={() => onSelect(r.id)}
                   className={cn(
                     "rounded-full outline-none cursor-pointer",

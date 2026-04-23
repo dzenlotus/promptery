@@ -202,11 +202,15 @@ export function PromptsMultiSelector({
                     <div className="px-3 pb-1 text-[10px] uppercase tracking-[0.1em] text-[var(--color-text-subtle)]">
                       Groups
                     </div>
-                    <div className="flex flex-wrap gap-1.5 px-2">
+                    {/* cmdk-group-items attr is load-bearing — without it the
+                        search-reorder calls appendChild(null) and crashes the
+                        whole tree on first keystroke. See bug #27. */}
+                    <div cmdk-group-items="" className="flex flex-wrap gap-1.5 px-2">
                       {availableGroups.map((g) => (
                         <Command.Item
                           key={g.id}
-                          value={`group ${g.name}`}
+                          value={g.id}
+                          keywords={[g.name, "group"]}
                           onSelect={() => {
                             toggleGroup(g);
                             setSearch("");
@@ -232,11 +236,16 @@ export function PromptsMultiSelector({
                     <div className="px-3 pb-1 text-[10px] uppercase tracking-[0.1em] text-[var(--color-text-subtle)]">
                       Prompts
                     </div>
-                    <div className="flex flex-wrap gap-1.5 px-2">
+                    <div cmdk-group-items="" className="flex flex-wrap gap-1.5 px-2">
                       {availablePrompts.map((p) => (
+                        // Value is the id (ids and names can collide across
+                        // the Groups/Prompts sections — and two prompts can
+                        // share a name outright). `keywords` is what users
+                        // actually type against.
                         <Command.Item
                           key={p.id}
-                          value={p.name}
+                          value={p.id}
+                          keywords={[p.name]}
                           onSelect={() => {
                             togglePrompt(p.id);
                             setSearch("");

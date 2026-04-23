@@ -152,7 +152,11 @@ export function TaskPromptsEditor({
               />
             </div>
             <Command.List className="max-h-[280px] overflow-y-auto scroll-thin">
-              <div className="flex flex-wrap items-start gap-1.5 p-2">
+              {/* cmdk-group-items attr is load-bearing — see bug #27.
+                  Without it the search-reorder calls appendChild(null) on
+                  first keystroke because cmdk can't find a group wrapper and
+                  its fallback selector returns null on our custom wrapper. */}
+              <div cmdk-group-items="" className="flex flex-wrap items-start gap-1.5 p-2">
                 <Command.Empty className="w-full px-1 py-2 text-[12px] text-[var(--color-text-subtle)]">
                   {allPrompts.length === 0
                     ? "No prompts yet. Create some in the Prompts view."
@@ -163,7 +167,8 @@ export function TaskPromptsEditor({
                 {availableToAdd.map((it) => (
                   <Command.Item
                     key={it.id}
-                    value={it.name}
+                    value={it.id}
+                    keywords={[it.name]}
                     onSelect={() => {
                       onDirectChange([...directIds, it.id]);
                       setAddOpen(false);

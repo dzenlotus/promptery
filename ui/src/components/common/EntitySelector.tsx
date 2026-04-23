@@ -176,18 +176,35 @@ export function EntitySelector<T extends EntityOption>({
                 </div>
                 {/* Wrap items inside Command.List so they sit in a real flex-wrap
                     container — otherwise cmdk's internal sizer div forces them
-                    into a vertical block stack. */}
+                    into a vertical block stack.
+
+                    The `cmdk-group-items=""` attribute is LOAD-BEARING. cmdk's
+                    search-reorder walks every CommandItem and calls
+                    `item.closest('[cmdk-group-items=""]').appendChild(...)`.
+                    Without this attribute the selector falls through to
+                    `item.closest('[cmdk-group-items=""] > *')` which returns
+                    null whenever items sit inside any non-cmdk wrapper — and
+                    `appendChild(null)` crashes the whole tree on first
+                    keystroke. See bug #27. */}
                 <Command.List className="max-h-[280px] overflow-y-auto scroll-thin">
-                  <div className="flex flex-wrap items-start gap-1.5 p-2">
+                  <div
+                    cmdk-group-items=""
+                    className="flex flex-wrap items-start gap-1.5 p-2"
+                  >
                     <Command.Empty className="w-full px-1 py-2 text-[12px] text-[var(--color-text-subtle)]">
                       {availableToAdd.length === 0
                         ? "All available items already added"
                         : "No matches"}
                     </Command.Empty>
                     {availableToAdd.map((it) => (
+                      // value must be unique across items — name collisions
+                      // corrupt cmdk's internal value->element map and crash
+                      // `appendChild` on the next keystroke. Keep id as value
+                      // and route search through `keywords`.
                       <Command.Item
                         key={it.id}
-                        value={it.name}
+                        value={it.id}
+                        keywords={[it.name]}
                         onSelect={() => handleSelect(it.id)}
                         className={cn(
                           "inline-flex items-center rounded-full cursor-pointer outline-none p-[2px]",

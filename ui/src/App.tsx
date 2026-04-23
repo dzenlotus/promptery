@@ -5,6 +5,7 @@ import { Canvas } from "./layout/Canvas.js";
 import { ThemeProvider } from "./providers/ThemeProvider.js";
 import { ThemedToaster } from "./providers/ThemedToaster.js";
 import { DevModeIndicator } from "./components/DevModeIndicator.js";
+import { ErrorBoundary } from "./components/ErrorBoundary.js";
 import { KanbanView } from "./views/KanbanView.js";
 import { HomeRedirect } from "./views/HomeRedirect.js";
 import { NotFoundView } from "./views/NotFoundView.js";
@@ -47,15 +48,19 @@ function Routed() {
 
 export function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <BackgroundLayer />
-        <Canvas>
-          <Routed />
-        </Canvas>
-        <DevModeIndicator />
-        <ThemedToaster />
-      </ThemeProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <BackgroundLayer />
+          <Canvas>
+            <ErrorBoundary>
+              <Routed />
+            </ErrorBoundary>
+          </Canvas>
+          <DevModeIndicator />
+          <ThemedToaster />
+        </ThemeProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
