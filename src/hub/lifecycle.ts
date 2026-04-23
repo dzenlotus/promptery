@@ -77,6 +77,11 @@ export async function ensureHubRunning(): Promise<HubEndpoint> {
  * matters twice: (1) it frees us from holding pipes open, and (2) it prevents
  * the hub's logs from leaking into the bridge's stdout — which would corrupt
  * the MCP JSON-RPC stream.
+ *
+ * `process.execArgv` is propagated so the child inherits any loader flags
+ * (e.g. tsx's `--import`/`--require`). Without this, running the bridge via
+ * `tsx src/cli.ts server` in dev would spawn a bare-node child that can't
+ * load the TypeScript CLI and dies instantly.
  */
 function spawnDetachedHub(port: number): ChildProcess {
   const execPath = process.execPath;
@@ -85,11 +90,15 @@ function spawnDetachedHub(port: number): ChildProcess {
     throw new Error("Cannot determine CLI path to spawn hub");
   }
 
-  const child = spawn(execPath, [cliPath, "hub", "--port", String(port)], {
-    detached: true,
-    stdio: "ignore",
-    env: { ...process.env, PROMPTERY_HUB_AUTOSTARTED: "1" },
-  });
+  const child = spawn(
+    execPath,
+    [...process.execArgv, cliPath, "hub", "--port", String(port)],
+    {
+      detached: true,
+      stdio: "ignore",
+      env: { ...process.env, PROMPTERY_HUB_AUTOSTARTED: "1" },
+    }
+  );
   child.unref();
   return child;
 }
