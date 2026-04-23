@@ -129,4 +129,15 @@ Early-stage personal tool. Rough edges expected. Feedback welcome via GitHub iss
 
 ## License
 
-Proprietary. All rights reserved. See [LICENSE](./LICENSE) for details.
+Promptery is licensed under the [Elastic License 2.0](./LICENSE).
+
+In short:
+- ✅ Use it for yourself or your team, free of charge
+- ✅ Modify it, fork it, use it inside your company
+- ✅ Self-host it for internal use
+- ❌ Don't resell it as a hosted/managed service to third parties
+- ❌ Don't remove copyright notices or circumvent license keys
+
+For full terms see [LICENSE](./LICENSE).
+
+Copyright © 2026 dzenlotus

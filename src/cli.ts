@@ -1,3 +1,9 @@
+/**
+ * Promptery — context orchestration for AI agents
+ * Copyright © 2026 dzenlotus
+ * Licensed under the Elastic License 2.0 (see LICENSE file)
+ */
+
 import { Command } from "commander";
 import { readFileSync } from "node:fs";
 import { runHub } from "./runner.js";
