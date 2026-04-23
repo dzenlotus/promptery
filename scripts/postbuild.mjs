@@ -1,4 +1,4 @@
-import { cpSync, mkdirSync } from "node:fs";
+import { chmodSync, cpSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
 const assets = [
@@ -13,4 +13,9 @@ for (const [src, dest] of assets) {
   mkdirSync(dirname(dest), { recursive: true });
   cpSync(src, dest);
   console.log(`copied ${src} -> ${dest}`);
+}
+
+if (process.platform !== "win32") {
+  chmodSync("dist/cli.js", 0o755);
+  console.log("chmod +x dist/cli.js");
 }

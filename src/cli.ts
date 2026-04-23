@@ -1,3 +1,5 @@
+#!/usr/bin/env node
+
 /**
  * Promptery — context orchestration for AI agents
  * Copyright © 2026 dzenlotus
