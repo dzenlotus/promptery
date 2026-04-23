@@ -13,6 +13,7 @@ import {
 } from "../validators/tasks.js";
 import { bus } from "../events/bus.js";
 import { buildContextBundle } from "../../lib/context.js";
+import { resolveTaskContext } from "../../db/inheritance/index.js";
 
 export const boardTasksRoute = new Hono();
 
@@ -48,6 +49,18 @@ tasksRoute.get("/:id", (c) => {
 });
 
 /**
+ * Fully resolved task context — active role plus the deduplicated union of
+ * prompts from all 6 origins (direct, role, column, column-role, board,
+ * board-role). UI uses this for the inspector's "effective context" view;
+ * MCP consumers get the same shape via the bundle endpoint below.
+ */
+tasksRoute.get("/:id/context", (c) => {
+  const context = resolveTaskContext(getDb(), c.req.param("id"));
+  if (!context) return c.json({ error: "task not found" }, 404);
+  return c.json(context);
+});
+
+/**
  * Returns the task's context bundle as XML (the exact string an agent would
  * paste into its system prompt). MCP's get_task_bundle tool proxies this
  * endpoint verbatim — it ships the agent XML rather than JSON wrapping XML.
@@ -55,7 +68,8 @@ tasksRoute.get("/:id", (c) => {
 tasksRoute.get("/:id/bundle", (c) => {
   const task = q.getTask(getDb(), c.req.param("id"));
   if (!task) return c.json({ error: "task not found" }, 404);
-  const xml = buildContextBundle(task);
+  const context = resolveTaskContext(getDb(), task.id);
+  const xml = buildContextBundle(task, context);
   return c.body(xml, 200, { "Content-Type": "application/xml; charset=utf-8" });
 });
 

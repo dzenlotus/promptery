@@ -10,6 +10,10 @@ export function getDbPath(): string {
   return join(getHomeDir(), "db.sqlite");
 }
 
+export function getBackupsDir(): string {
+  return join(getHomeDir(), "backups");
+}
+
 export function ensureHomeDir(): void {
   const dir = getHomeDir();
   if (!existsSync(dir)) {

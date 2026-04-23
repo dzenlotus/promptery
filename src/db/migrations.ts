@@ -18,6 +18,8 @@ export function runMigrations(db: Database): void {
   ensureMigrationsTable(db);
   runMigration(db, "002_add_tag_kind", apply002AddTagKind);
   runMigration(db, "004_refactor_tags_to_typed_entities", apply004RefactorTags);
+  runMigration(db, "005_settings", apply005Settings);
+  runMigration(db, "006_inheritance", apply006Inheritance);
   backfillDefaultColumnsForEmptyBoards(db);
 }
 
@@ -184,6 +186,55 @@ function migrateTagsData(db: Database): void {
   }
 
   db.exec("DROP TABLE tags");
+}
+
+function apply005Settings(db: Database): void {
+  const sqlUrl = new URL("./migrations/005_settings.sql", import.meta.url);
+  const sql = readFileSync(sqlUrl, "utf-8");
+  db.exec(sql);
+}
+
+/**
+ * Apply 006: add boards.role_id / columns.role_id and the board_prompts /
+ * column_prompts link tables. Run only the ALTER TABLE statements that are
+ * actually needed — schema.sql already declares the new tables with CREATE
+ * IF NOT EXISTS, so on fresh installs the SQL's ALTER TABLE would fail
+ * because the column already exists.
+ *
+ * Mirrors the pattern used in 004: the SQL file is loaded at runtime but
+ * guarded statements (`IF NOT EXISTS`, column-presence checks) keep the
+ * migration idempotent.
+ */
+function apply006Inheritance(db: Database): void {
+  const boardCols = db.prepare("PRAGMA table_info(boards)").all() as { name: string }[];
+  if (!boardCols.some((c) => c.name === "role_id")) {
+    db.exec("ALTER TABLE boards ADD COLUMN role_id TEXT REFERENCES roles(id) ON DELETE SET NULL");
+  }
+  const columnCols = db.prepare("PRAGMA table_info(columns)").all() as { name: string }[];
+  if (!columnCols.some((c) => c.name === "role_id")) {
+    db.exec(
+      "ALTER TABLE columns ADD COLUMN role_id TEXT REFERENCES roles(id) ON DELETE SET NULL"
+    );
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS board_prompts (
+      board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+      prompt_id TEXT NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
+      position INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (board_id, prompt_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_board_prompts_board ON board_prompts(board_id, position);
+    CREATE TABLE IF NOT EXISTS column_prompts (
+      column_id TEXT NOT NULL REFERENCES columns(id) ON DELETE CASCADE,
+      prompt_id TEXT NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
+      position INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (column_id, prompt_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_column_prompts_column ON column_prompts(column_id, position);
+    CREATE INDEX IF NOT EXISTS idx_boards_role ON boards(role_id);
+    CREATE INDEX IF NOT EXISTS idx_columns_role ON columns(role_id);
+  `);
 }
 
 /**

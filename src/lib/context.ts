@@ -1,41 +1,115 @@
 import type { TaskWithRelations } from "../db/queries/tasks.js";
-import type { TaskPrompt } from "../db/queries/taskPrompts.js";
 import type { TaskSkill } from "../db/queries/taskSkills.js";
 import type { TaskMcpTool } from "../db/queries/taskMcpTools.js";
+import type {
+  ResolvedPrompt,
+  ResolvedRole,
+  ResolvedTaskContext,
+} from "../db/inheritance/types.js";
 
 /**
  * Renders a task's full agent context as an XML-tagged string.
  *
- * The bundle splits into two top-level sections so an agent can distinguish
- * "who I am" (role identity + role-provided primitives) from "what I'm doing"
- * (the task description + any direct attachments specific to this task).
+ * With the inheritance layer (stage 8.1) prompts can come from up to six
+ * origins, so the caller passes the resolved context computed by
+ * `resolveTaskContext`. When it's omitted we synthesise a minimal context
+ * from `task.role` and `task.prompts` (origin marked `role:<id>` or
+ * `direct`), which keeps the old behaviour for callers that haven't wired
+ * the resolver in yet.
+ *
+ * The bundle splits into two top-level sections:
+ *   - `<role>` — identity + everything inherited from the active role
+ *     (role prompts, role skills, role MCP tools)
+ *   - `<task>` — description + direct attachments specific to this task
+ *   - `<inherited>` — prompts pulled from board / column / their roles when
+ *     present; collapses to nothing if the task lives on a board with no
+ *     inherited prompts configured
  *
  * Empty sections are omitted entirely — never emit `<prompts></prompts>` —
  * because empty containers add noise without information.
  */
-export function buildContextBundle(task: TaskWithRelations): string {
+export function buildContextBundle(
+  task: TaskWithRelations,
+  context?: ResolvedTaskContext | null
+): string {
+  const ctx = context ?? synthesiseFromTask(task);
+
   const parts: string[] = [];
-  const roleSection = renderRoleSection(task);
+  const roleSection = renderRoleSection(task, ctx);
   if (roleSection) parts.push(roleSection);
-  parts.push(renderTaskSection(task));
+  parts.push(renderTaskSection(task, ctx));
+  const inheritedSection = renderInheritedSection(ctx);
+  if (inheritedSection) parts.push(inheritedSection);
   return parts.join("\n\n");
 }
 
-function renderRoleSection(task: TaskWithRelations): string | null {
-  if (!task.role) return null;
-  const role = task.role;
-  const roleOrigin = `role:${role.id}`;
+function synthesiseFromTask(task: TaskWithRelations): ResolvedTaskContext {
+  const role: ResolvedRole | null = task.role
+    ? {
+        id: task.role.id,
+        name: task.role.name,
+        content: task.role.content,
+        color: task.role.color ?? null,
+        source: "task",
+      }
+    : null;
 
-  const inheritedPrompts = task.prompts.filter((p) => p.origin === roleOrigin);
-  const inheritedSkills = task.skills.filter((s) => s.origin === roleOrigin);
-  const inheritedMcp = task.mcp_tools.filter((m) => m.origin === roleOrigin);
+  const prompts: ResolvedPrompt[] = task.prompts.map((p) => {
+    const isRoleInherited = p.origin.startsWith("role:");
+    const base: ResolvedPrompt = {
+      id: p.id,
+      name: p.name,
+      content: p.content,
+      color: p.color ?? null,
+      origin: isRoleInherited ? "role" : "direct",
+    };
+    // Keep a source pointer when the origin carries one so the role-section
+    // renderer can match prompts to the active role without re-joining.
+    if (isRoleInherited && role) {
+      base.source = { type: "role", id: role.id, name: role.name };
+    }
+    return base;
+  });
+
+  return { task_id: task.id, role, prompts };
+}
+
+function renderRoleSection(
+  task: TaskWithRelations,
+  ctx: ResolvedTaskContext
+): string | null {
+  const role = ctx.role;
+  if (!role) return null;
+
+  // Prompts inherited *from* this active role — origin "role" carrying the
+  // same role id, or any prompt whose source points at this role.
+  const rolePrompts = ctx.prompts.filter(
+    (p) =>
+      (p.origin === "role" || p.origin === "column-role" || p.origin === "board-role") &&
+      p.source?.id === role.id
+  );
+
+  // Skills / MCP tools still flow through the legacy task_* tables tagged
+  // with `role:<id>` origin — they're outside the inheritance stage for now.
+  const roleOriginTag = `role:${role.id}`;
+  const inheritedSkills = task.skills.filter((s) => s.origin === roleOriginTag);
+  const inheritedMcp = task.mcp_tools.filter((m) => m.origin === roleOriginTag);
 
   const inner: string[] = [];
   if (role.content.trim().length > 0) {
     inner.push(indent(wrapText("description", null, role.content), 1));
   }
-  if (inheritedPrompts.length > 0) {
-    inner.push(indent(renderPrimitiveGroup("prompts", "prompt", inheritedPrompts), 1));
+  if (rolePrompts.length > 0) {
+    inner.push(
+      indent(
+        renderPrimitiveGroup(
+          "prompts",
+          "prompt",
+          rolePrompts.map((p) => ({ name: p.name, content: p.content }))
+        ),
+        1
+      )
+    );
   }
   if (inheritedSkills.length > 0) {
     inner.push(indent(renderPrimitiveGroup("skills", "skill", inheritedSkills), 1));
@@ -47,26 +121,36 @@ function renderRoleSection(task: TaskWithRelations): string | null {
   return wrapElements("role", { name: role.name }, inner.join("\n\n"));
 }
 
-function renderTaskSection(task: TaskWithRelations): string {
-  const direct = {
-    prompts: task.prompts.filter((p) => p.origin === "direct"),
-    skills: task.skills.filter((s) => s.origin === "direct"),
-    mcp_tools: task.mcp_tools.filter((m) => m.origin === "direct"),
-  };
+function renderTaskSection(
+  task: TaskWithRelations,
+  ctx: ResolvedTaskContext
+): string {
+  const directPrompts = ctx.prompts.filter((p) => p.origin === "direct");
+  const directSkills: TaskSkill[] = task.skills.filter((s) => s.origin === "direct");
+  const directMcp: TaskMcpTool[] = task.mcp_tools.filter((m) => m.origin === "direct");
 
   const inner: string[] = [];
   if (task.description.trim().length > 0) {
     inner.push(indent(wrapText("description", null, task.description), 1));
   }
-  if (direct.prompts.length > 0) {
-    inner.push(indent(renderPrimitiveGroup("direct_prompts", "prompt", direct.prompts), 1));
-  }
-  if (direct.skills.length > 0) {
-    inner.push(indent(renderPrimitiveGroup("direct_skills", "skill", direct.skills), 1));
-  }
-  if (direct.mcp_tools.length > 0) {
+  if (directPrompts.length > 0) {
     inner.push(
-      indent(renderPrimitiveGroup("direct_mcp_tools", "mcp_tool", direct.mcp_tools), 1)
+      indent(
+        renderPrimitiveGroup(
+          "direct_prompts",
+          "prompt",
+          directPrompts.map((p) => ({ name: p.name, content: p.content }))
+        ),
+        1
+      )
+    );
+  }
+  if (directSkills.length > 0) {
+    inner.push(indent(renderPrimitiveGroup("direct_skills", "skill", directSkills), 1));
+  }
+  if (directMcp.length > 0) {
+    inner.push(
+      indent(renderPrimitiveGroup("direct_mcp_tools", "mcp_tool", directMcp), 1)
     );
   }
 
@@ -77,7 +161,75 @@ function renderTaskSection(task: TaskWithRelations): string {
   );
 }
 
-type PrimitiveLike = Pick<TaskPrompt | TaskSkill | TaskMcpTool, "name" | "content">;
+/**
+ * Prompts pulled from board-level and column-level sources (direct or via
+ * their roles). Rendered as a sibling of `<task>` so agents can tell
+ * workspace-wide context from task-specific identity.
+ */
+function renderInheritedSection(ctx: ResolvedTaskContext): string | null {
+  const boardPrompts = ctx.prompts.filter((p) => p.origin === "board");
+  const boardRolePrompts = ctx.prompts.filter((p) => p.origin === "board-role");
+  const columnPrompts = ctx.prompts.filter((p) => p.origin === "column");
+  const columnRolePrompts = ctx.prompts.filter((p) => p.origin === "column-role");
+
+  const groups: string[] = [];
+  if (boardPrompts.length > 0) {
+    groups.push(
+      indent(
+        renderPrimitiveGroup(
+          "board_prompts",
+          "prompt",
+          boardPrompts.map((p) => ({ name: p.name, content: p.content }))
+        ),
+        1
+      )
+    );
+  }
+  if (boardRolePrompts.length > 0) {
+    groups.push(
+      indent(
+        renderPrimitiveGroup(
+          "board_role_prompts",
+          "prompt",
+          boardRolePrompts.map((p) => ({ name: p.name, content: p.content }))
+        ),
+        1
+      )
+    );
+  }
+  if (columnPrompts.length > 0) {
+    groups.push(
+      indent(
+        renderPrimitiveGroup(
+          "column_prompts",
+          "prompt",
+          columnPrompts.map((p) => ({ name: p.name, content: p.content }))
+        ),
+        1
+      )
+    );
+  }
+  if (columnRolePrompts.length > 0) {
+    groups.push(
+      indent(
+        renderPrimitiveGroup(
+          "column_role_prompts",
+          "prompt",
+          columnRolePrompts.map((p) => ({ name: p.name, content: p.content }))
+        ),
+        1
+      )
+    );
+  }
+
+  if (groups.length === 0) return null;
+  return wrapElements("inherited", null, groups.join("\n\n"));
+}
+
+interface PrimitiveLike {
+  name: string;
+  content: string;
+}
 
 function renderPrimitiveGroup(
   groupTag: string,

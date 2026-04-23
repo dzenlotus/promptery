@@ -34,7 +34,9 @@ describe("json installer", () => {
     expect(result.alreadyInstalled).toBe(false);
 
     const parsed = JSON.parse(await readFile(configPath, "utf-8"));
-    expect(parsed.mcpServers.promptery.command).toBe("npx");
+    // Installer writes the absolute npx path (or bare "npx" as a last-resort
+    // fallback) so GUI hosts without a shell PATH can still spawn the bridge.
+    expect(parsed.mcpServers.promptery.command).toMatch(/(^|\/)(npx|npx\.cmd)$/);
     expect(parsed.mcpServers.promptery.args).toContain("@dzenlotus/promptery");
     expect(parsed.mcpServers.promptery.args).toContain("--agent");
     expect(parsed.mcpServers.promptery.args).toContain("test");

@@ -76,3 +76,58 @@ export const delete_board: ToolDefinition = {
   },
   handler: async (args, { hub }) => hub.delete(`/api/boards/${args.id as string}`),
 };
+
+export const set_board_role: ToolDefinition = {
+  name: "set_board_role",
+  description:
+    "Assign or clear the role attached to a board. Every task on this board inherits the board-level role unless the task or its column overrides it. Pass role_id=null to clear.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      board_id: { type: "string" },
+      role_id: {
+        type: ["string", "null"],
+        description: "Role id, or null to clear.",
+      },
+    },
+    required: ["board_id"],
+    additionalProperties: false,
+  },
+  handler: async (args, { hub }) =>
+    hub.put(`/api/boards/${args.board_id as string}/role`, {
+      role_id: (args.role_id ?? null) as string | null,
+    }),
+};
+
+export const set_board_prompts: ToolDefinition = {
+  name: "set_board_prompts",
+  description:
+    "Replace the set of prompts attached directly to a board. These prompts appear in every task's resolved context (origin='board') alongside anything contributed by the board-role, column, column-role, task-role or the task itself.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      board_id: { type: "string" },
+      prompt_ids: { type: "array", items: { type: "string" } },
+    },
+    required: ["board_id", "prompt_ids"],
+    additionalProperties: false,
+  },
+  handler: async (args, { hub }) =>
+    hub.put(`/api/boards/${args.board_id as string}/prompts`, {
+      prompt_ids: (args.prompt_ids ?? []) as string[],
+    }),
+};
+
+export const get_board_prompts: ToolDefinition = {
+  name: "get_board_prompts",
+  description:
+    "List the prompts attached directly to a board (excluding any contributed by the board-role).",
+  inputSchema: {
+    type: "object",
+    properties: { board_id: { type: "string" } },
+    required: ["board_id"],
+    additionalProperties: false,
+  },
+  handler: async (args, { hub }) =>
+    hub.get(`/api/boards/${args.board_id as string}/prompts`),
+};

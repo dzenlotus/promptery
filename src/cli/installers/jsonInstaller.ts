@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
+import { resolveNpxPath } from "./nodeResolver.js";
 
 export interface JsonInstallerConfig {
   /** Human-friendly name used in messages, e.g. "Claude Desktop". */
@@ -35,7 +36,7 @@ function buildServerConfig(agentHint: string): {
   args: string[];
 } {
   return {
-    command: "npx",
+    command: resolveNpxPath(),
     args: ["-y", "@dzenlotus/promptery", "server", "--agent", agentHint],
   };
 }

@@ -47,7 +47,7 @@ export const get_task: ToolDefinition = {
 export const get_task_bundle: ToolDefinition = {
   name: "get_task_bundle",
   description:
-    "Get the task's full agent-ready context as XML: role identity, role prompts, task description, and direct prompts — formatted so you can paste it straight into the agent system prompt. Call this when you start working on a task.",
+    "Get the task's fully-resolved agent context as XML. The resolver pulls the active role (task > column > board — first set wins) and the deduplicated union of prompts from 6 origins (direct, role, column, column-role, board, board-role), then formats it so you can paste it straight into the agent's system prompt. Call this when you start working on a task.",
   inputSchema: {
     type: "object",
     properties: { id: { type: "string" } },
@@ -57,6 +57,20 @@ export const get_task_bundle: ToolDefinition = {
   // Returns a raw XML string, not JSON — the MCP handler ships it as-is.
   handler: async (args, { hub }) =>
     hub.getText(`/api/tasks/${args.id as string}/bundle`),
+};
+
+export const get_task_context: ToolDefinition = {
+  name: "get_task_context",
+  description:
+    "Get the resolved task context as structured JSON: active role (with source: task|column|board) and the deduplicated prompt list with per-prompt origin (direct / role / column / column-role / board / board-role). Use this when you need programmatic access to origin metadata; use get_task_bundle when you want pasteable XML.",
+  inputSchema: {
+    type: "object",
+    properties: { id: { type: "string" } },
+    required: ["id"],
+    additionalProperties: false,
+  },
+  handler: async (args, { hub }) =>
+    hub.get(`/api/tasks/${args.id as string}/context`),
 };
 
 export const create_task: ToolDefinition = {

@@ -79,15 +79,28 @@ export function RoleSelector({ selectedRoleId, onChange, roles }: Props) {
             </Command.Empty>
             <div className="flex flex-wrap gap-1.5 px-2 pb-2">
               {roles.map((r) => (
+                // Feedback lives on the chip itself, not on a halo behind it:
+                // a halo on `Command.Item` didn't align with the chip's
+                // rounded-pill silhouette and leaked out around the edges
+                // (visible as a bronze outline on hover / keyboard focus).
+                // `rounded-full` on the wrapper keeps the click target snug
+                // to the chip so the focus ring cmdk doesn't render its own.
                 <Command.Item
                   key={r.id}
                   value={r.name}
                   onSelect={() => onSelect(r.id)}
                   className={cn(
-                    "cursor-pointer rounded-full outline-none",
-                    "transition-colors duration-100",
-                    selectedRoleId === r.id ? "ring-1 ring-[var(--color-accent)]/50" : "",
-                    "data-[selected=true]:bg-[var(--color-accent-soft)]"
+                    "rounded-full outline-none cursor-pointer",
+                    // cmdk writes data-selected="true" on the highlighted item.
+                    // Darken the inner chip pill instead of wrapping it — the
+                    // wrapper halo didn't match Chip's rounded-pill silhouette
+                    // and leaked out the edges.
+                    // Chip sets borderColor via inline style so we can only
+                    // reach bg here; that's enough signal.
+                    "[&[data-selected=true]>span]:bg-[var(--active-overlay)]",
+                    // Currently-selected role: accent-tinted pill so you can
+                    // see which one is active at a glance.
+                    selectedRoleId === r.id && "[&>span]:bg-[var(--color-accent-soft)]"
                   )}
                 >
                   <Chip name={r.name} color={r.color} size="sm" />

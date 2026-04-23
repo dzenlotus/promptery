@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs";
 import { getDb } from "./db/index.js";
+import { maybeAutoBackup } from "./db/backup.js";
 import { startServer, type ServerHandle } from "./server/index.js";
 import {
   writeHubLock,
@@ -7,17 +7,8 @@ import {
   readHubLock,
   isHubAlive,
 } from "./hub/discovery.js";
-
-function loadVersion(): string {
-  try {
-    const pkg = JSON.parse(
-      readFileSync(new URL("../package.json", import.meta.url), "utf-8")
-    ) as { version: string };
-    return pkg.version;
-  } catch {
-    return "0.0.0";
-  }
-}
+import { printStartupBanner } from "./server/banner.js";
+import { getAppVersion } from "./lib/version.js";
 
 export interface RunHubOptions {
   preferredPort?: number;
@@ -45,7 +36,21 @@ export async function runHub(options: RunHubOptions = {}): Promise<HubHandle> {
     );
   }
 
-  getDb();
+  const db = getDb();
+
+  // Rolling daily DB snapshot into ~/.promptery/backups, one at most per 24h,
+  // with a 30-day retention window. Failures are logged and don't block start.
+  const autoBackup = await maybeAutoBackup(30, db);
+  if (autoBackup.created) {
+    console.error(
+      `[promptery-hub] auto-backup created: ${autoBackup.created.filename}`
+    );
+  }
+  if (autoBackup.pruned.length > 0) {
+    console.error(
+      `[promptery-hub] pruned ${autoBackup.pruned.length} old auto-backup(s)`
+    );
+  }
 
   const preferred = options.preferredPort ?? 4321;
   const handle = await startServer(preferred, preferred + 100);
@@ -54,7 +59,7 @@ export async function runHub(options: RunHubOptions = {}): Promise<HubHandle> {
     pid: process.pid,
     port: handle.port,
     started_at: Date.now(),
-    version: loadVersion(),
+    version: getAppVersion(),
   });
 
   // stderr — hub may be launched with stdout=ignored, and we don't want any
@@ -63,19 +68,24 @@ export async function runHub(options: RunHubOptions = {}): Promise<HubHandle> {
 
   if (options.banner) {
     const { port, uiMounted } = handle;
-    console.log();
-    console.log("  🪷 Promptery hub");
-    console.log();
-    if (uiMounted) {
-      console.log(`  Web UI:  http://localhost:${port}`);
-    } else {
-      console.log(`  API:     http://localhost:${port}/api`);
-      console.log(`  UI:      (not bundled — run \`cd ui && npm run dev\` for dev mode)`);
+    if (process.stdout.isTTY) {
+      // Foreground `start` / `hub`: show the styled banner. The URL points
+      // at the UI if bundled, otherwise at the API root (dev workflow uses
+      // `cd ui && npm run dev` against the API port).
+      const url = uiMounted
+        ? `http://localhost:${port}`
+        : `http://localhost:${port}/api`;
+      printStartupBanner(url, getAppVersion());
+      if (!uiMounted) {
+        console.log(
+          `  (UI not bundled — run \`cd ui && npm run dev\` for dev mode)`
+        );
+        console.log();
+      }
     }
-    console.log(`  WS:      ws://localhost:${port}/ws`);
-    console.log();
-    console.log("  Press Ctrl+C to stop");
-    console.log();
+    // Non-TTY (detached child from `ensureHubRunning`, piped logs, CI) already
+    // got the single-line `[promptery-hub] ready on ...` message above —
+    // no banner to avoid leaking ANSI escapes into captured output.
   }
 
   let shuttingDown = false;

@@ -6,7 +6,7 @@ export const ENTITY_COLORS = [
   "#ffd60a",
   "#30d158",
   "#40c8e0",
-  "#0a84ff",
+  "#ff375f",
   "#bf5af2",
 ] as const;
 

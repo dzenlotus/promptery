@@ -7,6 +7,8 @@ const assets = [
     "src/db/migrations/004_refactor_tags_to_typed_entities.sql",
     "dist/db/migrations/004_refactor_tags_to_typed_entities.sql",
   ],
+  ["src/db/migrations/005_settings.sql", "dist/db/migrations/005_settings.sql"],
+  ["src/db/migrations/006_inheritance.sql", "dist/db/migrations/006_inheritance.sql"],
 ];
 
 for (const [src, dest] of assets) {

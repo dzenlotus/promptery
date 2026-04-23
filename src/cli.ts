@@ -27,6 +27,14 @@ import {
 } from "./cli/installers/clients.js";
 import type { InstallResult } from "./cli/installers/jsonInstaller.js";
 import type { CursorScope } from "./cli/installers/paths.js";
+import { isManagedNode } from "./cli/installers/nodeResolver.js";
+import { clearHubLock, isProcessAlive, readHubLock } from "./hub/discovery.js";
+import {
+  createBackup,
+  deleteBackup,
+  listBackups,
+  restoreBackup,
+} from "./db/backup.js";
 
 function loadPackageVersion(): string {
   const pkgUrl = new URL("../package.json", import.meta.url);
@@ -50,6 +58,19 @@ function printInstallResult(result: InstallResult, nextSteps?: string[]): void {
   process.exitCode = 1;
 }
 
+/**
+ * Shown after install commands only. Reminds version-manager users that the
+ * absolute npx path we wrote will go stale if they `nvm use` a different
+ * version — then their host will try to spawn a binary that no longer exists.
+ */
+function printManagedNodeWarning(): void {
+  if (!isManagedNode()) return;
+  console.log("");
+  console.log("⚠ Detected Node version manager (nvm/fnm/volta/asdf).");
+  console.log("  If you switch Node versions later, re-run this install command");
+  console.log("  to update the path stored in config.");
+}
+
 function printSimpleResult(result: InstallResult): void {
   if (result.success) {
     console.log(`✓ ${result.message}`);
@@ -67,6 +88,73 @@ program
   .version(loadPackageVersion());
 
 // -------- hub / server --------
+
+program
+  .command("start")
+  .description(
+    "Start Promptery hub in the foreground (UI + API + DB). Ctrl+C to stop."
+  )
+  .option("-p, --port <port>", "Preferred port", "4321")
+  .action(async (opts: { port: string }) => {
+    const port = Number.parseInt(opts.port, 10);
+    if (Number.isNaN(port)) {
+      console.error(`Invalid port: "${opts.port}"`);
+      process.exit(1);
+    }
+    await runHub({ preferredPort: port, banner: true });
+  });
+
+program
+  .command("stop")
+  .description("Stop the Promptery hub process if running.")
+  .action(async () => {
+    const lock = await readHubLock();
+
+    if (!lock) {
+      console.log("Hub is not running.");
+      return;
+    }
+
+    if (!isProcessAlive(lock.pid)) {
+      console.log("Hub process is not running (stale lock file — cleaning up).");
+      await clearHubLock();
+      return;
+    }
+
+    console.log(`Stopping hub (PID ${lock.pid}, port ${lock.port})...`);
+
+    try {
+      process.kill(lock.pid, "SIGTERM");
+    } catch (err) {
+      console.error(
+        `Failed to send SIGTERM: ${err instanceof Error ? err.message : String(err)}`
+      );
+      process.exit(1);
+    }
+
+    // Poll for up to ~4s so the hub has a chance to close the DB, flush the
+    // WS, and unlink its own lockfile. 200ms × 20 is fine-grained enough to
+    // feel snappy while still covering slower machines under load.
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 200));
+      if (!isProcessAlive(lock.pid)) {
+        console.log("✓ Hub stopped.");
+        return;
+      }
+    }
+
+    console.log("Hub did not stop gracefully, sending SIGKILL...");
+    try {
+      process.kill(lock.pid, "SIGKILL");
+      await clearHubLock();
+      console.log("✓ Hub force-killed.");
+    } catch (err) {
+      console.error(
+        `Failed to force-kill: ${err instanceof Error ? err.message : String(err)}`
+      );
+      process.exit(1);
+    }
+  });
 
 program
   .command("hub")
@@ -134,6 +222,7 @@ program
 
     console.log("");
     console.log("Restart your AI clients for the changes to take effect.");
+    printManagedNodeWarning();
   });
 
 program
@@ -147,6 +236,7 @@ program
       '3. Ask Claude: "What MCP tools do you have available?"',
       "4. Claude should list Promptery tools",
     ]);
+    printManagedNodeWarning();
   });
 
 program
@@ -158,6 +248,7 @@ program
       "1. Restart Claude Code",
       "2. If not working, run: claude mcp add promptery npx -y @dzenlotus/promptery server",
     ]);
+    printManagedNodeWarning();
   });
 
 program
@@ -171,6 +262,7 @@ program
       "1. Restart Cursor",
       "2. Promptery MCP tools will be available in chat",
     ]);
+    printManagedNodeWarning();
   });
 
 program
@@ -183,6 +275,7 @@ program
       "2. In the new session, Promptery tools will be available",
       "Note: TOML comments may be lost during update — keep a backup if you have important ones.",
     ]);
+    printManagedNodeWarning();
   });
 
 program
@@ -194,6 +287,7 @@ program
       "1. Restart Qwen Code",
       "2. Run /mcp to verify Promptery is connected",
     ]);
+    printManagedNodeWarning();
   });
 
 program
@@ -205,6 +299,7 @@ program
       "1. Restart GigaCode CLI",
       "2. Verify MCP is connected via built-in commands",
     ]);
+    printManagedNodeWarning();
   });
 
 // -------- uninstall commands --------
@@ -302,6 +397,93 @@ program
     }
     console.log("");
     console.log("Legend: ✓ installed · detected but not installed ○ client not detected");
+  });
+
+// -------- backups --------
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+program
+  .command("backup")
+  .description("Create a manual backup of the Promptery database")
+  .option("-n, --name <name>", "Custom name prefix for the backup file")
+  .action(async (opts: { name?: string }) => {
+    try {
+      const backup = await createBackup(opts.name, "manual");
+      console.log(`✓ Backup created: ${backup.filename}`);
+      console.log(`  Location: ${backup.fullPath}`);
+      console.log(`  Size:     ${formatBytes(backup.size_bytes)}`);
+    } catch (err) {
+      console.error(
+        `✗ Backup failed: ${err instanceof Error ? err.message : String(err)}`
+      );
+      process.exit(1);
+    }
+  });
+
+program
+  .command("backups")
+  .description("List all Promptery backups")
+  .action(async () => {
+    const backups = await listBackups();
+    if (backups.length === 0) {
+      console.log("No backups found.");
+      return;
+    }
+
+    console.log(`Found ${backups.length} backup(s):\n`);
+    for (const b of backups) {
+      const date = new Date(b.created_at).toISOString().replace("T", " ").slice(0, 19);
+      console.log(`  ${b.filename}`);
+      console.log(`    ${date}  ${formatBytes(b.size_bytes)}  [${b.reason}]`);
+    }
+  });
+
+program
+  .command("restore")
+  .description("Restore the database from a backup file (hub must be stopped)")
+  .argument("<filename>", "Backup filename from `promptery backups`")
+  .action(async (filename: string) => {
+    const lock = await readHubLock();
+    if (lock && isProcessAlive(lock.pid)) {
+      console.error(
+        "✗ Hub is currently running. Stop it first: promptery stop"
+      );
+      process.exit(1);
+    }
+
+    try {
+      const result = await restoreBackup(filename);
+      console.log(`✓ Database restored from: ${result.restored}`);
+      if (result.safetyBackup) {
+        console.log(`  Previous database saved as: ${result.safetyBackup}`);
+      }
+    } catch (err) {
+      console.error(
+        `✗ Restore failed: ${err instanceof Error ? err.message : String(err)}`
+      );
+      process.exit(1);
+    }
+  });
+
+program
+  .command("backup-delete")
+  .description("Delete a single backup file")
+  .argument("<filename>", "Backup filename from `promptery backups`")
+  .action(async (filename: string) => {
+    try {
+      await deleteBackup(filename);
+      console.log(`✓ Deleted: ${filename}`);
+    } catch (err) {
+      console.error(
+        `✗ Delete failed: ${err instanceof Error ? err.message : String(err)}`
+      );
+      process.exit(1);
+    }
   });
 
 // -------- default action (MCP host calls without args) --------

@@ -6,6 +6,9 @@ import type { Column, Task } from "../../lib/types.js";
 import { IconButton } from "../ui/IconButton.js";
 import { TaskCard } from "./TaskCard.js";
 import { TaskDialog } from "../tasks/TaskDialog.js";
+import { ColumnContextMenu } from "./ColumnContextMenu.js";
+import { ColumnRenameDialog } from "./ColumnRenameDialog.js";
+import { ColumnDeleteDialog } from "./ColumnDeleteDialog.js";
 
 interface Props {
   boardId: string;
@@ -15,6 +18,8 @@ interface Props {
 
 export function KanbanColumn({ boardId, column, tasks }: Props) {
   const [createOpen, setCreateOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const { setNodeRef, isOver } = useDroppable({
     id: column.id,
     data: { type: "column", columnId: column.id },
@@ -35,9 +40,15 @@ export function KanbanColumn({ boardId, column, tasks }: Props) {
             {tasks.length}
           </span>
         </div>
-        <IconButton label="Add task" size="sm" onClick={() => setCreateOpen(true)}>
-          <Plus size={14} />
-        </IconButton>
+        <div className="flex items-center gap-0.5">
+          <IconButton label="Add task" size="sm" onClick={() => setCreateOpen(true)}>
+            <Plus size={14} />
+          </IconButton>
+          <ColumnContextMenu
+            onRename={() => setRenameOpen(true)}
+            onDelete={() => setDeleteOpen(true)}
+          />
+        </div>
       </div>
 
       <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
@@ -63,6 +74,19 @@ export function KanbanColumn({ boardId, column, tasks }: Props) {
         columnId={column.id}
         open={createOpen}
         onClose={() => setCreateOpen(false)}
+      />
+      <ColumnRenameDialog
+        boardId={boardId}
+        column={column}
+        open={renameOpen}
+        onClose={() => setRenameOpen(false)}
+      />
+      <ColumnDeleteDialog
+        boardId={boardId}
+        column={column}
+        taskCount={tasks.length}
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
       />
     </div>
   );

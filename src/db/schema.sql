@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS boards (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  role_id TEXT REFERENCES roles(id) ON DELETE SET NULL,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
@@ -10,6 +11,7 @@ CREATE TABLE IF NOT EXISTS columns (
   board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   position INTEGER NOT NULL,
+  role_id TEXT REFERENCES roles(id) ON DELETE SET NULL,
   created_at INTEGER NOT NULL
 );
 
@@ -106,6 +108,34 @@ CREATE TABLE IF NOT EXISTS task_mcp_tools (
   position REAL NOT NULL DEFAULT 0,
   PRIMARY KEY (task_id, mcp_tool_id)
 );
+
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY NOT NULL,
+  value TEXT NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+-- Board-level and column-level prompt attachments. Resolver unions these
+-- with task-level direct prompts and with role prompts from each layer.
+CREATE TABLE IF NOT EXISTS board_prompts (
+  board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
+  prompt_id TEXT NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (board_id, prompt_id)
+);
+
+CREATE TABLE IF NOT EXISTS column_prompts (
+  column_id TEXT NOT NULL REFERENCES columns(id) ON DELETE CASCADE,
+  prompt_id TEXT NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (column_id, prompt_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_board_prompts_board ON board_prompts(board_id, position);
+CREATE INDEX IF NOT EXISTS idx_column_prompts_column ON column_prompts(column_id, position);
+-- idx_boards_role and idx_columns_role reference role_id columns added by
+-- migration 006; on existing DBs schema.sql runs before migrations, so
+-- those indexes are created inside apply006Inheritance instead.
 
 CREATE INDEX IF NOT EXISTS idx_tasks_board_column ON tasks(board_id, column_id, position);
 -- idx_tasks_role is created in migrations.ts after the role_id ALTER on legacy DBs

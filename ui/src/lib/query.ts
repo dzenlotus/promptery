@@ -19,4 +19,6 @@ export const qk = {
   mcpTools: ["mcp_tools"] as const,
   roles: ["roles"] as const,
   role: (id: string) => ["role", id] as const,
+  setting: (key: string) => ["setting", key] as const,
+  settings: ["settings"] as const,
 };

@@ -35,7 +35,9 @@ describe("codex TOML installer", () => {
 
     const raw = await readFile(pathHolder.current, "utf-8");
     const parsed = parseToml(raw) as any;
-    expect(parsed.mcp_servers.promptery.command).toBe("npx");
+    // Installer writes the absolute npx path (or bare "npx" as a last-resort
+    // fallback) so GUI hosts without a shell PATH can still spawn the bridge.
+    expect(parsed.mcp_servers.promptery.command).toMatch(/(^|\/)(npx|npx\.cmd)$/);
     expect(parsed.mcp_servers.promptery.args).toContain("@dzenlotus/promptery");
     expect(parsed.mcp_servers.promptery.args).toContain("--agent");
     expect(parsed.mcp_servers.promptery.args).toContain("codex");

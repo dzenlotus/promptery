@@ -3,13 +3,14 @@ import { dirname } from "node:path";
 import { parse as parseToml, stringify as stringifyToml } from "@iarna/toml";
 import { getCodexConfigPath } from "./paths.js";
 import type { InstallResult, StatusResult } from "./jsonInstaller.js";
+import { resolveNpxPath } from "./nodeResolver.js";
 
 const SERVER_NAME = "promptery";
 const SERVERS_KEY = "mcp_servers";
 
 function buildServerConfig(): { command: string; args: string[] } {
   return {
-    command: "npx",
+    command: resolveNpxPath(),
     args: ["-y", "@dzenlotus/promptery", "server", "--agent", "codex"],
   };
 }

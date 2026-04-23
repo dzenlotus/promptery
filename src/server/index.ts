@@ -11,9 +11,12 @@ import skillsRoute from "./routes/skills.js";
 import mcpToolsRoute from "./routes/mcpTools.js";
 import rolesRoute from "./routes/roles.js";
 import bridgesRoute from "./routes/bridges.js";
+import settingsRoute from "./routes/settings.js";
+import { createDataRouter } from "./routes/data.js";
 import { errorHandler } from "./middleware/error.js";
 import { handleWsClose, handleWsOpen } from "./events/websocket.js";
 import { findFreePort } from "../lib/port.js";
+import { getAppVersion } from "../lib/version.js";
 import { mountUiStatic } from "./static.js";
 
 export function createApp() {
@@ -33,6 +36,8 @@ export function createApp() {
   app.route("/api/mcp_tools", mcpToolsRoute);
   app.route("/api/roles", rolesRoute);
   app.route("/api/bridges", bridgesRoute);
+  app.route("/api/settings", settingsRoute);
+  app.route("/api/data", createDataRouter(getAppVersion()));
 
   app.get(
     "/ws",

@@ -8,7 +8,7 @@
  * Border ladder:   border → border-strong         (2 steps, white alphas)
  * Text ladder:     text → text-muted → text-subtle (3 steps, readable hierarchy)
  * State overlays:  hover-overlay, active-overlay, accent-soft  (uniform across all interactives)
- * Accent:          SF blue, one hex + ring alpha — used everywhere primary action is meant
+ * Accent:          warm gold, one hex + ring alpha — used everywhere primary action is meant
  * Semantic:        danger, success (dual-purpose tokens with *-soft fills)
  *
  * Every interactive in the app draws its hover/active/focus from this ladder,
@@ -29,12 +29,12 @@
   --color-text-muted: #7a746a;
   --color-text-subtle: #544e46;
 
-  /* Accent — single SF blue, one family. */
-  --color-accent: #0a84ff;
-  --color-accent-hover: #3a9bff;
-  --color-accent-active: #0071e3;
-  --color-accent-soft: rgba(10, 132, 255, 0.12);
-  --color-accent-ring: rgba(10, 132, 255, 0.28);
+  /* Accent — warm gold, one family. */
+  --color-accent: #cd9b58;
+  --color-accent-hover: #dcaf73;
+  --color-accent-active: #b48241;
+  --color-accent-soft: rgba(205, 155, 88, 0.14);
+  --color-accent-ring: rgba(205, 155, 88, 0.32);
 
   /* Semantic. */
   --color-danger: #ff453a;
@@ -76,6 +76,91 @@ body,
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow: hidden;
+}
+
+/*
+ * Light theme — re-maps the same token ladder to near-white surfaces with
+ * dark text. Every token the UI reads via `var(--color-*)` flips together;
+ * there are no additional rules scattered across the codebase.
+ *
+ * Kept inside one block so the diff is reviewable at a glance and the token
+ * contract is auditable.
+ */
+[data-theme="light"] {
+  --color-bg: #f4f1ec;
+  --color-surface: #ffffff;
+  --color-surface-raised: #faf7f2;
+
+  --color-border: rgba(15, 15, 15, 0.08);
+  --color-border-strong: rgba(15, 15, 15, 0.16);
+
+  /* Text ladder — tuned for ≥4.5:1 (AA) on both --color-surface (#ffffff)
+     and --color-bg (#f4f1ec). The dark-theme palette can afford a very
+     low-contrast subtle tier because dark pixels hide behind grain; light
+     backgrounds do not have that margin so we darken subtle more
+     aggressively here than a symmetrical palette would suggest. */
+  --color-text: #1a1714;
+  --color-text-muted: #5d554c;
+  --color-text-subtle: #625b53;
+
+  --color-accent: #a66a1f;
+  --color-accent-hover: #b87925;
+  --color-accent-active: #925618;
+  --color-accent-soft: rgba(166, 106, 31, 0.14);
+  --color-accent-ring: rgba(166, 106, 31, 0.32);
+
+  --color-danger: #c23a30;
+  --color-danger-hover: #d3483e;
+  --color-danger-soft: rgba(194, 58, 48, 0.1);
+  --color-success: #1f8e43;
+
+  --hover-overlay: rgba(15, 15, 15, 0.05);
+  --active-overlay: rgba(15, 15, 15, 0.09);
+
+  --shadow-sm: 0 1px 2px rgba(15, 15, 15, 0.06);
+  --shadow-md: 0 4px 16px rgba(15, 15, 15, 0.08);
+  --shadow-lg: 0 20px 40px rgba(15, 15, 15, 0.12);
+
+  color-scheme: light;
+}
+[data-theme="light"] body {
+  background: var(--color-bg);
+}
+[data-theme="light"] .gradient-border::before {
+  background: linear-gradient(
+    135deg,
+    rgba(15, 15, 15, 0.12) 0%,
+    rgba(15, 15, 15, 0.04) 40%,
+    rgba(15, 15, 15, 0.02) 60%,
+    rgba(15, 15, 15, 0.08) 100%
+  );
+}
+[data-theme="light"] .liquid-glass {
+  background: rgba(250, 247, 242, 0.72);
+}
+[data-theme="light"] .liquid-glass-strong {
+  background: rgba(255, 255, 255, 0.78);
+}
+[data-theme="light"] .liquid-glass-opaque {
+  background: rgba(255, 255, 255, 0.96);
+}
+[data-theme="light"] .liquid-glass-panel {
+  background: rgba(252, 250, 247, 0.8);
+}
+[data-theme="light"] .scroll-thin::-webkit-scrollbar-thumb {
+  background: rgba(15, 15, 15, 0.08);
+}
+[data-theme="light"] .scroll-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 15, 15, 0.16);
+}
+[data-theme="light"] .milkdown-toolbar {
+  background: rgba(15, 15, 15, 0.025);
+}
+[data-theme="light"] .milkdown code {
+  background: rgba(15, 15, 15, 0.05);
+}
+[data-theme="light"] .milkdown pre {
+  background: rgba(15, 15, 15, 0.06);
 }
 
 /*
@@ -147,6 +232,14 @@ body,
 .liquid-glass-opaque {
   background: rgba(31, 28, 23, 0.96);
   backdrop-filter: blur(20px) saturate(180%);
+}
+/* Panel tier — slightly more translucent than -strong so the animated BG
+   is perceptible through the left sidebar and task cards without losing
+   readability. Sits between liquid-glass (too see-through for nav) and
+   liquid-glass-strong. */
+.liquid-glass-panel {
+  background: rgba(31, 28, 23, 0.78);
+  backdrop-filter: blur(22px) saturate(175%);
 }
 
 .scroll-hidden {

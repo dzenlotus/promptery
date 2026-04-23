@@ -36,7 +36,10 @@ export function Dialog({
   return (
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
       <RadixDialog.Portal>
-        <RadixDialog.Overlay className="fixed inset-0 z-40 bg-black/55 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=open]:fade-in" />
+        {/* Overlay carries the heavy blur — 24px frost + a light vignette.
+            The tint is deliberately low (20%) because the blur alone is what
+            separates modal from canvas; a heavier tint just dims the result. */}
+        <RadixDialog.Overlay className="fixed inset-0 z-40 bg-black/20 backdrop-blur-xl data-[state=open]:animate-in data-[state=open]:fade-in" />
         <RadixDialog.Content
           onPointerDownOutside={(e) => {
             if (lockOutsideClick) e.preventDefault();
@@ -48,7 +51,10 @@ export function Dialog({
             className={cn(
               "w-full",
               width,
-              "liquid-glass-opaque gradient-border rounded-2xl shadow-[0_20px_40px_rgba(0,0,0,0.55)]",
+              // liquid-glass-strong — real translucency so the blurred canvas
+              // peeks through the card edges, matching the sidebar / dropdown
+              // / popover surface tier.
+              "liquid-glass-strong gradient-border rounded-2xl shadow-[var(--shadow-lg)]",
               "max-h-[86vh] grid grid-rows-[auto_1fr_auto]"
             )}
           >

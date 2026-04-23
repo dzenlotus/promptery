@@ -72,6 +72,21 @@ export function useWebSocket(): void {
           qc.setQueryData(qk.role(evt.data.roleId), evt.data.role);
           qc.invalidateQueries({ queryKey: ["tasks"] });
           break;
+        case "setting.changed":
+          qc.setQueryData(qk.setting(evt.data.key), evt.data.value);
+          break;
+        case "setting.deleted":
+          qc.invalidateQueries({ queryKey: qk.setting(evt.data.key) });
+          break;
+        case "data.imported":
+        case "data.restored":
+          // Both events can touch every table; refetch everything.
+          qc.invalidateQueries();
+          break;
+        case "data.backup_created":
+        case "data.backup_deleted":
+          qc.invalidateQueries({ queryKey: ["backups"] });
+          break;
       }
     });
     return () => {

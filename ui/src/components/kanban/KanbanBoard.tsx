@@ -21,6 +21,7 @@ import { qk } from "../../lib/query.js";
 import { useMoveTask } from "../../hooks/useTasks.js";
 import { KanbanColumn } from "./KanbanColumn.js";
 import { TaskCard } from "./TaskCard.js";
+import { AddColumnButton } from "./AddColumnButton.js";
 
 interface Props {
   boardId: string;
@@ -245,10 +246,25 @@ export function KanbanBoard({ boardId, columns, tasks }: Props) {
       onDragEnd={onDragEnd}
       onDragCancel={onDragCancel}
     >
-      <div data-testid="kanban-board" className="grid grid-cols-4 gap-4 h-full min-h-0">
+      {/*
+        Horizontal flex + overflow-x-auto so the board scrolls sideways once
+        the user adds more columns than fit on screen. Each column has a
+        fixed width via min-w/basis so they don't collapse under many siblings.
+        The AddColumnButton sits at the right end as a sticky-feeling affordance
+        (it scrolls with the columns, which is the expected Trello/Linear behaviour).
+      */}
+      <div
+        data-testid="kanban-board"
+        className="flex gap-4 h-full min-h-0 overflow-x-auto scroll-thin pb-1"
+      >
         {columns.map((c) => (
-          <KanbanColumn key={c.id} boardId={boardId} column={c} tasks={grouped[c.id] ?? []} />
+          <div key={c.id} className="flex-none w-[280px] h-full min-h-0">
+            <KanbanColumn boardId={boardId} column={c} tasks={grouped[c.id] ?? []} />
+          </div>
         ))}
+        <div className="flex-none">
+          <AddColumnButton boardId={boardId} />
+        </div>
       </div>
       <DragOverlay>
         {activeTask ? <TaskCard task={activeTask} boardId={boardId} dragOverlay /> : null}

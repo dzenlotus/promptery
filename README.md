@@ -123,6 +123,20 @@ If an agent doesn't see Promptery's tools after install:
 3. Check the client's own MCP log files (path varies by client).
 4. Try manual installation by opening the config file shown in `status` output.
 
+### MCP server not connecting (nvm / fnm / volta / asdf users)
+
+If your Node is managed via nvm, fnm, volta, or asdf and the MCP server
+doesn't start in Claude Desktop / Claude Code, re-run the installer:
+
+```bash
+npx -y @dzenlotus/promptery@latest install-claude-code
+```
+
+GUI apps don't inherit shell PATH, so a bare `npx` can't be resolved. The
+installer writes the absolute path to `npx` into the client config so the
+host can spawn it directly. When you switch Node versions later, re-run
+the install command to refresh the path.
+
 ## Status
 
 Early-stage personal tool. Rough edges expected. Feedback welcome via GitHub issues.

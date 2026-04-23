@@ -58,7 +58,7 @@ export function TaskCard({ task, boardId, dragOverlay }: Props) {
           <span className="text-[11px] tabular-nums text-[var(--color-text-subtle)]">
             #{task.number}
           </span>
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-0.5">
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
             <IconButton
               label="Edit task"
               size="sm"

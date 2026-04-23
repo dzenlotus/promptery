@@ -3,7 +3,8 @@ import { cn } from "../../lib/cn.js";
 
 interface Props extends HTMLAttributes<HTMLDivElement> {
   /**
-   * - "sidebar": opaque surface fill + gradient hairline border. For the left sidebar.
+   * - "sidebar": translucent surface + blur + gradient hairline. For the left sidebar.
+   *   Lets the appearance background peek through while staying readable.
    * - "sub-panel": transparent fill + solid 1px border. For kanban columns etc.
    * - "modal-glass": blurred glass + gradient hairline. For floating modals.
    */
@@ -22,7 +23,7 @@ export function GlassPanel({
   const radiusCls = { lg: "rounded-lg", xl: "rounded-xl", "2xl": "rounded-2xl" }[radius];
   const variantCls =
     variant === "sidebar"
-      ? "bg-[var(--color-surface)] gradient-border shadow-[var(--shadow-md)]"
+      ? "liquid-glass-panel gradient-border shadow-[var(--shadow-md)]"
       : variant === "modal-glass"
         ? "liquid-glass-opaque gradient-border shadow-[var(--shadow-lg)]"
         : "bg-transparent solid-border";

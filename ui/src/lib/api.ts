@@ -1,8 +1,14 @@
 import type {
+  BackupInfo,
   Board,
   Column,
   CreatePrimitiveInput,
   CreateTaskInput,
+  ExportBundle,
+  ExportOptions,
+  ImportPreview,
+  ImportResult,
+  ImportStrategy,
   McpTool,
   Prompt,
   Role,
@@ -131,6 +137,59 @@ export const api = {
   prompts: primitiveResource<Prompt>("/api/prompts"),
   skills: primitiveResource<Skill>("/api/skills"),
   mcp_tools: primitiveResource<McpTool>("/api/mcp_tools"),
+  data: {
+    exportBundle: (options: ExportOptions) =>
+      request<ExportBundle>("/api/data/export", { method: "POST", body: json(options) }),
+    importPreview: (bundle: unknown, strategy: ImportStrategy) =>
+      request<ImportPreview>("/api/data/import/preview", {
+        method: "POST",
+        body: json({ bundle, strategy }),
+      }),
+    importApply: (bundle: unknown, strategy: ImportStrategy) =>
+      request<ImportResult>("/api/data/import/apply", {
+        method: "POST",
+        body: json({ bundle, strategy }),
+      }),
+    listBackups: () => request<BackupInfo[]>("/api/data/backups"),
+    createBackup: (name?: string) =>
+      request<BackupInfo>("/api/data/backups", {
+        method: "POST",
+        body: json(name ? { name } : {}),
+      }),
+    restoreBackup: (filename: string) =>
+      request<{ ok: true; restored: string; safetyBackup: string | null }>(
+        `/api/data/backups/${encodeURIComponent(filename)}/restore`,
+        { method: "POST" }
+      ),
+    deleteBackup: (filename: string) =>
+      request<{ ok: true }>(
+        `/api/data/backups/${encodeURIComponent(filename)}`,
+        { method: "DELETE" }
+      ),
+  },
+  settings: {
+    list: (prefix?: string) =>
+      request<{ key: string; value: unknown; updated_at: number }[]>(
+        prefix ? `/api/settings?prefix=${encodeURIComponent(prefix)}` : "/api/settings"
+      ),
+    get: (key: string) =>
+      request<{ key: string; value: unknown }>(`/api/settings/${encodeURIComponent(key)}`),
+    set: (key: string, value: unknown) =>
+      request<{ key: string; value: unknown; updated_at: number }>(
+        `/api/settings/${encodeURIComponent(key)}`,
+        { method: "PUT", body: json({ value }) }
+      ),
+    setBulk: (entries: Record<string, unknown>) =>
+      request<{ key: string; value: unknown; updated_at: number }[]>(
+        "/api/settings/bulk",
+        { method: "POST", body: json({ entries }) }
+      ),
+    delete: (key: string) =>
+      request<{ ok: true; deleted: boolean }>(
+        `/api/settings/${encodeURIComponent(key)}`,
+        { method: "DELETE" }
+      ),
+  },
   roles: {
     list: () => request<Role[]>("/api/roles"),
     get: (id: string) => request<RoleWithRelations>(`/api/roles/${id}`),

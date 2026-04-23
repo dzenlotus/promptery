@@ -83,6 +83,72 @@ export interface CreatePrimitiveInput {
 
 export type UpdatePrimitiveInput = Partial<CreatePrimitiveInput>;
 
+export interface BackupInfo {
+  filename: string;
+  fullPath: string;
+  size_bytes: number;
+  created_at: number;
+  reason: "manual" | "auto" | "pre-migration" | "pre-restore";
+}
+
+export interface ExportOptions {
+  includeBoards?: boolean;
+  includeRoles?: boolean;
+  includePrompts?: boolean;
+  includeSettings?: boolean;
+  boardIds?: string[];
+}
+
+export interface ExportBundle {
+  format_version: string;
+  exported_at: string;
+  app_version: string;
+  options: ExportOptions;
+  data: Record<string, unknown>;
+}
+
+export type ImportStrategy = "skip" | "rename";
+
+export interface ImportPreviewCounts {
+  total: number;
+  new: number;
+  conflicts: number;
+}
+
+export interface ImportPreview {
+  format_ok: boolean;
+  format_version?: string;
+  counts: {
+    boards: ImportPreviewCounts;
+    roles: ImportPreviewCounts;
+    prompts: ImportPreviewCounts;
+    skills: ImportPreviewCounts;
+    mcp_tools: ImportPreviewCounts;
+    settings: { total: number };
+  };
+  conflicts: {
+    boards: Array<{ id: string; name: string; resolution: "skip" | "rename" | "new" }>;
+    roles: Array<{ id: string; name: string; resolution: "skip" | "rename" | "new" }>;
+    prompts: Array<{ id: string; name: string; resolution: "skip" | "rename" | "new" }>;
+    skills: Array<{ id: string; name: string; resolution: "skip" | "rename" | "new" }>;
+    mcp_tools: Array<{ id: string; name: string; resolution: "skip" | "rename" | "new" }>;
+  };
+  errors: string[];
+}
+
+export interface ImportResult {
+  counts: {
+    boards: { added: number; skipped: number; renamed: number };
+    columns: { added: number };
+    tasks: { added: number };
+    roles: { added: number; skipped: number; renamed: number };
+    prompts: { added: number; skipped: number; renamed: number };
+    skills: { added: number; skipped: number; renamed: number };
+    mcp_tools: { added: number; skipped: number; renamed: number };
+    settings: { upserted: number };
+  };
+}
+
 export type ServerEvent =
   | { type: "board.created"; data: { boardId: string; board: Board } }
   | { type: "board.updated"; data: { boardId: string; board: Board } }
@@ -140,4 +206,21 @@ export type ServerEvent =
   | {
       type: "role.relations_updated";
       data: { roleId: string; role: RoleWithRelations };
-    };
+    }
+  | { type: "setting.changed"; data: { key: string; value: unknown } }
+  | { type: "setting.deleted"; data: { key: string } }
+  | {
+      type: "data.imported";
+      data: {
+        counts: {
+          boards: { added: number; skipped: number; renamed: number };
+          roles: { added: number; skipped: number; renamed: number };
+          prompts: { added: number; skipped: number; renamed: number };
+          skills: { added: number; skipped: number; renamed: number };
+          mcp_tools: { added: number; skipped: number; renamed: number };
+        };
+      };
+    }
+  | { type: "data.restored"; data: { filename: string } }
+  | { type: "data.backup_created"; data: { filename: string; reason: string } }
+  | { type: "data.backup_deleted"; data: { filename: string } };
