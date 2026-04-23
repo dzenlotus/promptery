@@ -11,7 +11,7 @@ export const NAME_CONTAINS_LETTER = /[a-zA-Z]/;
 export const NAME_MAX_LENGTH = 50;
 
 export const primitiveName = z
-  .string({ required_error: "Name is required" })
+  .string({ error: "Name is required" })
   .min(1, "Name is required")
   .max(NAME_MAX_LENGTH, `Name must be at most ${NAME_MAX_LENGTH} characters`)
   .refine((v) => v.trim().length > 0, "Name cannot be blank")
