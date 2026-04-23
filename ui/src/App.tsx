@@ -4,6 +4,7 @@ import { BackgroundLayer } from "./background/BackgroundLayer.js";
 import { Canvas } from "./layout/Canvas.js";
 import { ThemeProvider } from "./providers/ThemeProvider.js";
 import { ThemedToaster } from "./providers/ThemedToaster.js";
+import { DevModeIndicator } from "./components/DevModeIndicator.js";
 import { KanbanView } from "./views/KanbanView.js";
 import { HomeRedirect } from "./views/HomeRedirect.js";
 import { NotFoundView } from "./views/NotFoundView.js";
@@ -52,6 +53,7 @@ export function App() {
         <Canvas>
           <Routed />
         </Canvas>
+        <DevModeIndicator />
         <ThemedToaster />
       </ThemeProvider>
     </QueryClientProvider>

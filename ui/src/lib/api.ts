@@ -82,7 +82,15 @@ function primitiveResource<T>(base: string) {
   };
 }
 
+export interface MetaInfo {
+  version: string;
+  devMode: boolean;
+}
+
 export const api = {
+  meta: {
+    get: () => request<MetaInfo>("/api/meta"),
+  },
   boards: {
     list: () => request<Board[]>("/api/boards"),
     get: (id: string) => request<BoardWithRelations>(`/api/boards/${id}`),

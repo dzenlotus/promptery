@@ -8,12 +8,26 @@ function color(code: string, text: string): string {
   return `\x1b[${code}m${text}\x1b[0m`;
 }
 
-export function printStartupBanner(url: string, version: string): void {
+export interface StartupBannerOptions {
+  url: string;
+  version: string;
+  homeDir: string;
+  dbPath: string;
+  devMode: boolean;
+}
+
+export function printStartupBanner(options: StartupBannerOptions): void {
+  const { url, version, homeDir, dbPath, devMode } = options;
   const pink = (s: string) => color("95", s);
   const green = (s: string) => color("32", s);
   const dim = (s: string) => color("2", s);
   const bold = (s: string) => color("1", s);
   const cyan = (s: string) => color("36", s);
+  const yellow = (s: string) => color("93", s);
+
+  const title = devMode
+    ? `${bold("Promptery")} ${dim(`v${version}`)} ${yellow("[DEV]")}`
+    : `${bold("Promptery")} ${dim(`v${version}`)}`;
 
   const lines = [
     "",
@@ -23,10 +37,12 @@ export function printStartupBanner(url: string, version: string): void {
     `       ${green("\\__/")}`,
     `        ${green("|")}`,
     "",
-    `  ${bold("Promptery")} ${dim(`v${version}`)}`,
+    `  ${title}`,
     `  ${dim("Context orchestration for AI agents")}`,
     "",
     `  ${dim("→")} UI:     ${cyan(url)}`,
+    `  ${dim("→")} Home:   ${dim(homeDir)}`,
+    `  ${dim("→")} DB:     ${dim(dbPath)}`,
     `  ${dim("→")} MCP:    ${dim("agents connect via bridge process")}`,
     `  ${dim("→")} Docs:   ${dim("https://github.com/dzenlotus/promptery")}`,
     "",

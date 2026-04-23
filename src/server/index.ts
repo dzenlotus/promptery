@@ -13,6 +13,7 @@ import rolesRoute from "./routes/roles.js";
 import bridgesRoute from "./routes/bridges.js";
 import settingsRoute from "./routes/settings.js";
 import promptGroupsRoute from "./routes/promptGroups.js";
+import metaRoute from "./routes/meta.js";
 import { createDataRouter } from "./routes/data.js";
 import { errorHandler } from "./middleware/error.js";
 import { handleWsClose, handleWsOpen } from "./events/websocket.js";
@@ -39,6 +40,7 @@ export function createApp() {
   app.route("/api/bridges", bridgesRoute);
   app.route("/api/settings", settingsRoute);
   app.route("/api/prompt-groups", promptGroupsRoute);
+  app.route("/api/meta", metaRoute);
   app.route("/api/data", createDataRouter(getAppVersion()));
 
   app.get(
@@ -74,7 +76,12 @@ export async function startServer(
   const { app, injectWebSocket, uiMounted } = createApp();
   const port = await findFreePort(preferredPort, portRangeEnd);
 
-  return new Promise<ServerHandle>((resolve) => {
+  return new Promise<ServerHandle>((resolve, reject) => {
+    // findFreePort probes 127.0.0.1, but hono's serve binds on the default
+    // address — they can disagree (e.g. a sibling hub on ::/0.0.0.0 keeps
+    // the port taken for the actual listen). Without an error listener the
+    // underlying net.Server crashes the process with an unhandled 'error'
+    // event, which hides the real cause behind a stack trace.
     const server = serve({ fetch: app.fetch, port }, (info) => {
       injectWebSocket(server);
       resolve({
@@ -86,6 +93,17 @@ export async function startServer(
             server.close(() => res());
           }),
       });
+    });
+    server.on("error", (err) => {
+      if ((err as NodeJS.ErrnoException).code === "EADDRINUSE") {
+        reject(
+          new Error(
+            `Port ${port} is already in use. Stop the other process or pick a different port.`
+          )
+        );
+        return;
+      }
+      reject(err);
     });
   });
 }

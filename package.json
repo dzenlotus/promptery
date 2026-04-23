@@ -40,8 +40,10 @@
     "build": "npm run build:ui && npm run build:server",
     "build:ui": "cd ui && npm install && npm run build",
     "build:server": "tsc -p tsconfig.json && node scripts/postbuild.mjs",
-    "dev": "tsx watch src/cli.ts",
+    "dev": "PROMPTERY_HOME_DIR=$PWD/.dev-home PROMPTERY_PORT=4322 node dist/cli.js start",
+    "dev:build": "npm run build && npm run dev",
     "dev:ui": "npm --prefix ui run dev",
+    "dev:bridge": "tsx watch src/cli.ts",
     "typecheck": "tsc --noEmit -p tsconfig.test.json",
     "test": "vitest run",
     "test:watch": "vitest"

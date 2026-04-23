@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import lockfile from "proper-lockfile";
-import { findFreePort } from "../lib/port.js";
+import { findFreePort, resolvePreferredPort } from "../lib/port.js";
 import { getHomeDir } from "../lib/paths.js";
 import {
   readHubLock,
@@ -59,7 +59,10 @@ export async function ensureHubRunning(): Promise<HubEndpoint> {
       await clearHubLock();
     }
 
-    const port = await findFreePort(4321, 4399);
+    const preferred = resolvePreferredPort();
+    const port = preferred.exact
+      ? await findFreePort(preferred.port, preferred.port)
+      : await findFreePort(preferred.port, preferred.port + 78);
     const child = spawnDetachedHub(port);
     if (!child.pid) {
       throw new Error("Failed to spawn hub — child has no PID");

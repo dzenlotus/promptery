@@ -9,6 +9,8 @@ import {
 } from "./hub/discovery.js";
 import { printStartupBanner } from "./server/banner.js";
 import { getAppVersion } from "./lib/version.js";
+import { getDbPath, getHomeDir, isDevHome } from "./lib/paths.js";
+import { resolvePreferredPort } from "./lib/port.js";
 
 export interface RunHubOptions {
   preferredPort?: number;
@@ -52,8 +54,11 @@ export async function runHub(options: RunHubOptions = {}): Promise<HubHandle> {
     );
   }
 
-  const preferred = options.preferredPort ?? 4321;
-  const handle = await startServer(preferred, preferred + 100);
+  const preferred = resolvePreferredPort(options.preferredPort);
+  const handle = await startServer(
+    preferred.port,
+    preferred.exact ? preferred.port : preferred.port + 100
+  );
 
   await writeHubLock({
     pid: process.pid,
@@ -75,7 +80,13 @@ export async function runHub(options: RunHubOptions = {}): Promise<HubHandle> {
       const url = uiMounted
         ? `http://localhost:${port}`
         : `http://localhost:${port}/api`;
-      printStartupBanner(url, getAppVersion());
+      printStartupBanner({
+        url,
+        version: getAppVersion(),
+        homeDir: getHomeDir(),
+        dbPath: getDbPath(),
+        devMode: isDevHome(),
+      });
       if (!uiMounted) {
         console.log(
           `  (UI not bundled — run \`cd ui && npm run dev\` for dev mode)`

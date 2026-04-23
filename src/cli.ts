@@ -493,6 +493,18 @@ program.action(async () => {
 });
 
 program.parseAsync(process.argv).catch((err) => {
-  console.error(err instanceof Error ? err.stack ?? err.message : String(err));
+  // Expected failures (port busy, bad config) get a clean one-liner — agents
+  // and users don't need the JS stack. Unexpected errors still dump the stack
+  // so we don't lose debug signal.
+  const expected =
+    err instanceof Error &&
+    (/Port \d+ is already in use/.test(err.message) ||
+      /Invalid PROMPTERY_PORT/.test(err.message) ||
+      /Hub is already running/.test(err.message));
+  if (expected) {
+    console.error(`✗ ${(err as Error).message}`);
+  } else {
+    console.error(err instanceof Error ? (err.stack ?? err.message) : String(err));
+  }
   process.exit(1);
 });

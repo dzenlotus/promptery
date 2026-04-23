@@ -26,4 +26,5 @@ export const qk = {
   board: (id: string) => ["board", id] as const,
   column: (id: string) => ["column", id] as const,
   taskContext: (id: string) => ["task-context", id] as const,
+  meta: ["meta"] as const,
 };
