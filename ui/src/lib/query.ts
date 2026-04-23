@@ -21,4 +21,6 @@ export const qk = {
   role: (id: string) => ["role", id] as const,
   setting: (key: string) => ["setting", key] as const,
   settings: ["settings"] as const,
+  promptGroups: ["prompt-groups"] as const,
+  promptGroup: (id: string) => ["prompt-group", id] as const,
 };

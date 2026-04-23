@@ -20,6 +20,7 @@ export function runMigrations(db: Database): void {
   runMigration(db, "004_refactor_tags_to_typed_entities", apply004RefactorTags);
   runMigration(db, "005_settings", apply005Settings);
   runMigration(db, "006_inheritance", apply006Inheritance);
+  runMigration(db, "007_prompt_groups", apply007PromptGroups);
   backfillDefaultColumnsForEmptyBoards(db);
 }
 
@@ -235,6 +236,12 @@ function apply006Inheritance(db: Database): void {
     CREATE INDEX IF NOT EXISTS idx_boards_role ON boards(role_id);
     CREATE INDEX IF NOT EXISTS idx_columns_role ON columns(role_id);
   `);
+}
+
+function apply007PromptGroups(db: Database): void {
+  const sqlUrl = new URL("./migrations/007_prompt_groups.sql", import.meta.url);
+  const sql = readFileSync(sqlUrl, "utf-8");
+  db.exec(sql);
 }
 
 /**

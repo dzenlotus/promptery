@@ -12,6 +12,7 @@ import mcpToolsRoute from "./routes/mcpTools.js";
 import rolesRoute from "./routes/roles.js";
 import bridgesRoute from "./routes/bridges.js";
 import settingsRoute from "./routes/settings.js";
+import promptGroupsRoute from "./routes/promptGroups.js";
 import { createDataRouter } from "./routes/data.js";
 import { errorHandler } from "./middleware/error.js";
 import { handleWsClose, handleWsOpen } from "./events/websocket.js";
@@ -37,6 +38,7 @@ export function createApp() {
   app.route("/api/roles", rolesRoute);
   app.route("/api/bridges", bridgesRoute);
   app.route("/api/settings", settingsRoute);
+  app.route("/api/prompt-groups", promptGroupsRoute);
   app.route("/api/data", createDataRouter(getAppVersion()));
 
   app.get(

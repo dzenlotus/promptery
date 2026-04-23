@@ -11,6 +11,8 @@ import type {
   ImportStrategy,
   McpTool,
   Prompt,
+  PromptGroup,
+  PromptGroupWithPrompts,
   Role,
   RoleWithRelations,
   Skill,
@@ -135,6 +137,43 @@ export const api = {
       request<Task>(`/api/tasks/${id}/mcp_tools/${toolId}`, { method: "DELETE" }),
   },
   prompts: primitiveResource<Prompt>("/api/prompts"),
+  promptGroups: {
+    list: () => request<PromptGroup[]>("/api/prompt-groups"),
+    get: (id: string) =>
+      request<PromptGroupWithPrompts>(`/api/prompt-groups/${id}`),
+    create: (data: { name: string; color?: string | null; prompt_ids?: string[] }) =>
+      request<PromptGroupWithPrompts>("/api/prompt-groups", {
+        method: "POST",
+        body: json(data),
+      }),
+    update: (id: string, patch: { name?: string; color?: string | null; position?: number }) =>
+      request<PromptGroupWithPrompts>(`/api/prompt-groups/${id}`, {
+        method: "PATCH",
+        body: json(patch),
+      }),
+    delete: (id: string) =>
+      request<{ ok: true }>(`/api/prompt-groups/${id}`, { method: "DELETE" }),
+    setPrompts: (id: string, promptIds: string[]) =>
+      request<PromptGroupWithPrompts>(`/api/prompt-groups/${id}/prompts`, {
+        method: "PUT",
+        body: json({ prompt_ids: promptIds }),
+      }),
+    addPrompt: (id: string, promptId: string) =>
+      request<PromptGroupWithPrompts>(`/api/prompt-groups/${id}/prompts`, {
+        method: "POST",
+        body: json({ prompt_id: promptId }),
+      }),
+    removePrompt: (id: string, promptId: string) =>
+      request<PromptGroupWithPrompts>(
+        `/api/prompt-groups/${id}/prompts/${promptId}`,
+        { method: "DELETE" }
+      ),
+    reorder: (ids: string[]) =>
+      request<PromptGroup[]>("/api/prompt-groups/reorder", {
+        method: "POST",
+        body: json({ ids }),
+      }),
+  },
   skills: primitiveResource<Skill>("/api/skills"),
   mcp_tools: primitiveResource<McpTool>("/api/mcp_tools"),
   data: {

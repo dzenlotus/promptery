@@ -236,6 +236,109 @@ describe("columns DELETE", () => {
   });
 });
 
+describe("prompt groups API", () => {
+  it("POST creates a group with prompts, GET returns members", async () => {
+    const p1 = (await (await api("POST", "/api/prompts", { name: "pg-p1" })).json()) as {
+      id: string;
+    };
+    const p2 = (await (await api("POST", "/api/prompts", { name: "pg-p2" })).json()) as {
+      id: string;
+    };
+    const created = await api("POST", "/api/prompt-groups", {
+      name: "pg-core",
+      color: "#8b5cf6",
+      prompt_ids: [p1.id, p2.id],
+    });
+    expect(created.status).toBe(201);
+    const group = (await created.json()) as {
+      id: string;
+      name: string;
+      prompts: { id: string }[];
+      prompt_count: number;
+    };
+    expect(group.name).toBe("pg-core");
+    expect(group.prompt_count).toBe(2);
+    expect(group.prompts.map((p) => p.id).sort()).toEqual([p1.id, p2.id].sort());
+
+    const fetched = await api("GET", `/api/prompt-groups/${group.id}`);
+    expect(fetched.status).toBe(200);
+  });
+
+  it("PUT /:id/prompts replaces membership", async () => {
+    const p1 = (await (await api("POST", "/api/prompts", { name: "pg-set-1" })).json()) as {
+      id: string;
+    };
+    const p2 = (await (await api("POST", "/api/prompts", { name: "pg-set-2" })).json()) as {
+      id: string;
+    };
+    const g = (await (
+      await api("POST", "/api/prompt-groups", { name: "pg-set", prompt_ids: [p1.id] })
+    ).json()) as { id: string };
+
+    const res = await api("PUT", `/api/prompt-groups/${g.id}/prompts`, {
+      prompt_ids: [p2.id],
+    });
+    expect(res.status).toBe(200);
+    const updated = (await res.json()) as { prompts: { id: string }[] };
+    expect(updated.prompts.map((p) => p.id)).toEqual([p2.id]);
+  });
+
+  it("POST /:id/prompts is idempotent", async () => {
+    const p = (await (await api("POST", "/api/prompts", { name: "pg-idem" })).json()) as {
+      id: string;
+    };
+    const g = (await (
+      await api("POST", "/api/prompt-groups", { name: "pg-idem-g", prompt_ids: [p.id] })
+    ).json()) as { id: string };
+
+    const res = await api("POST", `/api/prompt-groups/${g.id}/prompts`, { prompt_id: p.id });
+    expect(res.status).toBe(200);
+    const updated = (await res.json()) as { prompts: { id: string }[] };
+    expect(updated.prompts).toHaveLength(1);
+  });
+
+  it("DELETE /:id leaves prompts alive", async () => {
+    const p = (await (await api("POST", "/api/prompts", { name: "pg-del" })).json()) as {
+      id: string;
+    };
+    const g = (await (
+      await api("POST", "/api/prompt-groups", { name: "pg-del-g", prompt_ids: [p.id] })
+    ).json()) as { id: string };
+
+    const del = await api("DELETE", `/api/prompt-groups/${g.id}`);
+    expect(del.status).toBe(200);
+
+    // Prompt itself should still exist.
+    const promptStillThere = await api("GET", `/api/prompts/${p.id}`);
+    expect(promptStillThere.status).toBe(200);
+  });
+
+  it("POST /reorder rewrites positions", async () => {
+    const a = (await (
+      await api("POST", "/api/prompt-groups", { name: "reorder-a" })
+    ).json()) as { id: string };
+    const b = (await (
+      await api("POST", "/api/prompt-groups", { name: "reorder-b" })
+    ).json()) as { id: string };
+
+    const res = await api("POST", "/api/prompt-groups/reorder", {
+      ids: [b.id, a.id],
+    });
+    expect(res.status).toBe(200);
+    const reordered = (await res.json()) as { id: string; position: number }[];
+    const byId = Object.fromEntries(reordered.map((g) => [g.id, g.position]));
+    expect(byId[b.id]).toBeLessThan(byId[a.id]!);
+  });
+
+  it("returns 400 for unknown prompt ids on create", async () => {
+    const res = await api("POST", "/api/prompt-groups", {
+      name: "bad",
+      prompt_ids: ["does-not-exist"],
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
 describe("inheritance API", () => {
   async function fresh() {
     const b = (await (await api("POST", "/api/boards", { name: "inh" })).json()) as {

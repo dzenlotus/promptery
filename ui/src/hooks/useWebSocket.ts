@@ -87,6 +87,15 @@ export function useWebSocket(): void {
         case "data.backup_deleted":
           qc.invalidateQueries({ queryKey: ["backups"] });
           break;
+        case "prompt_group.created":
+        case "prompt_group.deleted":
+        case "prompt_group.reordered":
+          qc.invalidateQueries({ queryKey: qk.promptGroups });
+          break;
+        case "prompt_group.updated":
+          qc.invalidateQueries({ queryKey: qk.promptGroups });
+          qc.invalidateQueries({ queryKey: qk.promptGroup(evt.data.groupId) });
+          break;
       }
     });
     return () => {

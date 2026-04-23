@@ -159,3 +159,27 @@ BEGIN
   DELETE FROM task_skills WHERE origin = 'role:' || OLD.id;
   DELETE FROM task_mcp_tools WHERE origin = 'role:' || OLD.id;
 END;
+
+-- Prompt groups — many-to-many organisational layer for prompts.
+-- Deleting a group cascades to prompt_group_members but not prompts;
+-- deleting a prompt cascades to prompt_group_members automatically.
+CREATE TABLE IF NOT EXISTS prompt_groups (
+  id TEXT PRIMARY KEY NOT NULL,
+  name TEXT NOT NULL,
+  color TEXT,
+  position INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS prompt_group_members (
+  group_id TEXT NOT NULL REFERENCES prompt_groups(id) ON DELETE CASCADE,
+  prompt_id TEXT NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL DEFAULT 0,
+  added_at INTEGER NOT NULL,
+  PRIMARY KEY (group_id, prompt_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_prompt_groups_position ON prompt_groups(position);
+CREATE INDEX IF NOT EXISTS idx_prompt_group_members_group ON prompt_group_members(group_id, position);
+CREATE INDEX IF NOT EXISTS idx_prompt_group_members_prompt ON prompt_group_members(prompt_id);

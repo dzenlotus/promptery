@@ -5,6 +5,7 @@ import type { Prompt } from "../../db/queries/prompts.js";
 import type { Skill } from "../../db/queries/skills.js";
 import type { McpTool } from "../../db/queries/mcpTools.js";
 import type { Role, RoleWithRelations } from "../../db/queries/roles.js";
+import type { PromptGroup } from "../../db/queries/promptGroups.js";
 
 export type ServerEvent =
   | { type: "board.created"; data: { boardId: string; board: Board } }
@@ -109,4 +110,14 @@ export type ServerEvent =
     }
   | { type: "data.restored"; data: { filename: string } }
   | { type: "data.backup_created"; data: { filename: string; reason: string } }
-  | { type: "data.backup_deleted"; data: { filename: string } };
+  | { type: "data.backup_deleted"; data: { filename: string } }
+  | {
+      type: "prompt_group.created";
+      data: { groupId: string; group: PromptGroup };
+    }
+  | {
+      type: "prompt_group.updated";
+      data: { groupId: string; group: PromptGroup };
+    }
+  | { type: "prompt_group.deleted"; data: { groupId: string } }
+  | { type: "prompt_group.reordered"; data: { ids: string[] } };

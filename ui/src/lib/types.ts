@@ -83,6 +83,28 @@ export interface CreatePrimitiveInput {
 
 export type UpdatePrimitiveInput = Partial<CreatePrimitiveInput>;
 
+export interface PromptGroup {
+  id: string;
+  name: string;
+  color: string | null;
+  position: number;
+  created_at: number;
+  updated_at: number;
+  prompt_count: number;
+}
+
+export interface PromptInGroup {
+  id: string;
+  name: string;
+  content: string;
+  color: string | null;
+  position: number;
+}
+
+export interface PromptGroupWithPrompts extends PromptGroup {
+  prompts: PromptInGroup[];
+}
+
 export interface BackupInfo {
   filename: string;
   fullPath: string;
@@ -209,6 +231,10 @@ export type ServerEvent =
     }
   | { type: "setting.changed"; data: { key: string; value: unknown } }
   | { type: "setting.deleted"; data: { key: string } }
+  | { type: "prompt_group.created"; data: { groupId: string; group: PromptGroup } }
+  | { type: "prompt_group.updated"; data: { groupId: string; group: PromptGroup } }
+  | { type: "prompt_group.deleted"; data: { groupId: string } }
+  | { type: "prompt_group.reordered"; data: { ids: string[] } }
   | {
       type: "data.imported";
       data: {

@@ -8,6 +8,7 @@ import { KanbanView } from "./views/KanbanView.js";
 import { HomeRedirect } from "./views/HomeRedirect.js";
 import { NotFoundView } from "./views/NotFoundView.js";
 import { PromptsView } from "./views/PromptsView.js";
+import { PromptGroupView } from "./views/PromptGroupView.js";
 import { RolesView } from "./views/RolesView.js";
 import { SkillsView } from "./views/SkillsView.js";
 import { McpToolsView } from "./views/McpToolsView.js";
@@ -25,6 +26,7 @@ function Routed() {
       <Route path="/board/:id" component={KanbanView} />
       <Route path="/roles" component={RolesView} />
       <Route path="/prompts" component={PromptsView} />
+      <Route path="/prompts/groups/:id" component={PromptGroupView} />
       <Route path="/skills" component={SkillsView} />
       <Route path="/mcp" component={McpToolsView} />
       <Route path="/settings" component={SettingsRedirect} />
