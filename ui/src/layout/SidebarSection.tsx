@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ScrollArea } from "../components/ui/ScrollArea.js";
 
 interface Props {
   label: string;
@@ -24,7 +25,7 @@ export function SidebarSection({ label, action, children }: Props) {
         </h3>
         {action ?? <div className="h-6 w-6" />}
       </div>
-      <div className="overflow-y-auto scroll-hidden px-1.5 pb-3">{children}</div>
+      <ScrollArea viewportClassName="px-1.5 pb-3">{children}</ScrollArea>
     </div>
   );
 }

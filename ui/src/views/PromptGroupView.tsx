@@ -22,6 +22,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { PageLayout } from "../layout/PageLayout.js";
+import { ScrollArea } from "../components/ui/ScrollArea.js";
 import { PromptsSidebarList } from "../components/prompts/PromptsSidebarList.js";
 import { SIDEBAR_PROMPT_DRAG_PREFIX } from "../components/prompts/DraggablePromptRow.js";
 import {
@@ -260,11 +261,8 @@ function GroupMainArea({ group, onOpenPrompt }: GroupMainAreaProps) {
   );
 
   return (
-    <div
-      data-testid="prompt-group-view"
-      data-group-id={group.id}
-      className="h-full overflow-y-auto p-8 max-w-[960px] mx-auto"
-    >
+    <ScrollArea data-testid="prompt-group-view" className="h-full">
+      <div data-group-id={group.id} className="p-8 max-w-[960px] mx-auto">
       <header className="flex items-center gap-3 mb-6">
         <div
           className="h-9 w-9 rounded-full grid place-items-center bg-[var(--hover-overlay)] border border-[var(--color-border)]"
@@ -317,7 +315,8 @@ function GroupMainArea({ group, onOpenPrompt }: GroupMainAreaProps) {
           </SortableContext>
         )}
       </div>
-    </div>
+      </div>
+    </ScrollArea>
   );
 }
 

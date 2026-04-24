@@ -22,6 +22,7 @@ import { useMoveTask } from "../../hooks/useTasks.js";
 import { KanbanColumn } from "./KanbanColumn.js";
 import { TaskCard } from "./TaskCard.js";
 import { AddColumnButton } from "./AddColumnButton.js";
+import { ScrollArea } from "../ui/ScrollArea.js";
 
 interface Props {
   boardId: string;
@@ -247,25 +248,34 @@ export function KanbanBoard({ boardId, columns, tasks }: Props) {
       onDragCancel={onDragCancel}
     >
       {/*
-        Horizontal flex + overflow-x-auto so the board scrolls sideways once
-        the user adds more columns than fit on screen. Each column has a
-        fixed width via min-w/basis so they don't collapse under many siblings.
-        The AddColumnButton sits at the right end as a sticky-feeling affordance
-        (it scrolls with the columns, which is the expected Trello/Linear behaviour).
+        Horizontal flex so the board scrolls sideways once the user adds more
+        columns than fit on screen. Each column has a fixed width so they
+        don't collapse under many siblings. The AddColumnButton sits at the
+        right end (scrolls with the columns, Trello/Linear style).
+
+        ScrollArea wraps the horizontal scroller; Radix's native-scroll
+        viewport keeps dnd-kit's auto-scroll working, and the hover-expand
+        bar matches the polish requested in bug #26.
       */}
-      <div
+      <ScrollArea
         data-testid="kanban-board"
-        className="flex gap-4 h-full min-h-0 overflow-x-auto scroll-thin pb-1"
+        orientation="horizontal"
+        className="h-full min-h-0"
       >
-        {columns.map((c) => (
-          <div key={c.id} className="flex-none w-[280px] h-full min-h-0">
-            <KanbanColumn boardId={boardId} column={c} tasks={grouped[c.id] ?? []} />
+        {/* Inner flex row. Radix Viewport wraps children in a sizer div,
+            so the flex layout lives one level deeper — putting `flex` on
+            the viewport itself doesn't stick. */}
+        <div className="flex h-full gap-4 items-stretch pb-1">
+          {columns.map((c) => (
+            <div key={c.id} className="flex-none w-[280px] h-full min-h-0">
+              <KanbanColumn boardId={boardId} column={c} tasks={grouped[c.id] ?? []} />
+            </div>
+          ))}
+          <div className="flex-none">
+            <AddColumnButton boardId={boardId} />
           </div>
-        ))}
-        <div className="flex-none">
-          <AddColumnButton boardId={boardId} />
         </div>
-      </div>
+      </ScrollArea>
       <DragOverlay>
         {activeTask ? <TaskCard task={activeTask} boardId={boardId} dragOverlay /> : null}
       </DragOverlay>

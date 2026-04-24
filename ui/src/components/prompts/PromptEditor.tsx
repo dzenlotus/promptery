@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { MilkdownEditor } from "../editor/MilkdownEditor.js";
 import { Button } from "../ui/Button.js";
+import { ScrollArea } from "../ui/ScrollArea.js";
 import { HeaderColorPicker } from "../sidebar/HeaderColorPicker.js";
 import { DRAFT_COLOR } from "../sidebar/colors.js";
 import { cn } from "../../lib/cn.js";
@@ -184,13 +185,13 @@ export function PromptEditor({ target, onCreate, onUpdate, onCreatedDraft }: Pro
         </div>
       </div>
 
-      <div className="min-h-0 min-w-0 overflow-y-auto scroll-thin p-8">
+      <ScrollArea className="min-h-0 min-w-0" viewportClassName="p-8">
         <MilkdownEditor
           key={editorKey}
           value={values.content}
           onChange={(content) => setValues((v) => ({ ...v, content }))}
         />
-      </div>
+      </ScrollArea>
 
       <div className="px-6 pb-4 pt-2">
         <div className="flex items-center justify-between gap-3 pl-4 pr-1.5 py-1.5 rounded-full border border-[var(--color-border)] bg-[var(--hover-overlay)] backdrop-blur-sm">

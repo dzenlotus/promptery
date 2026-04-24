@@ -16,6 +16,7 @@ import { ColumnContextMenu } from "./ColumnContextMenu.js";
 import { ColumnRenameDialog } from "./ColumnRenameDialog.js";
 import { ColumnEditDialog } from "./ColumnEditDialog.js";
 import { ColumnDeleteDialog } from "./ColumnDeleteDialog.js";
+import { ScrollArea } from "../ui/ScrollArea.js";
 
 interface Props {
   boardId: string;
@@ -111,20 +112,25 @@ export function KanbanColumn({ boardId, column, tasks }: Props) {
       </div>
 
       <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-        <div
-          ref={setNodeRef}
-          className={`overflow-y-auto scroll-thin grid auto-rows-max gap-2.5 min-h-[40px] rounded-md transition-colors ${
+        {/* Radix Viewport owns the native `overflow: auto`, so dnd-kit's
+            droppable ref must live there — that's the element whose
+            scroll-offset dnd-kit consults for auto-scroll while dragging. */}
+        <ScrollArea
+          viewportRef={setNodeRef}
+          className={`min-h-[40px] rounded-md transition-colors pr-2 -mr-2 ${
             isOver ? "bg-[var(--hover-overlay)]" : ""
           }`}
         >
-          {tasks.length === 0 ? (
-            <div className="text-center py-8 text-[12px] text-[var(--color-text-subtle)]">
-              Drop tasks here
-            </div>
-          ) : (
-            tasks.map((t) => <TaskCard key={t.id} task={t} boardId={boardId} />)
-          )}
-        </div>
+          <div className="grid auto-rows-max gap-2.5">
+            {tasks.length === 0 ? (
+              <div className="text-center py-8 text-[12px] text-[var(--color-text-subtle)]">
+                Drop tasks here
+              </div>
+            ) : (
+              tasks.map((t) => <TaskCard key={t.id} task={t} boardId={boardId} />)
+            )}
+          </div>
+        </ScrollArea>
       </SortableContext>
 
       <TaskDialog

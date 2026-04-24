@@ -242,6 +242,23 @@ body,
   backdrop-filter: blur(22px) saturate(175%);
 }
 
+/* Opt-in scrollbar styles. The five scroll containers that benefit from a
+   polished auto-hiding, hover-expanding look are wrapped in <ScrollArea/>
+   (Radix-based) instead — see ui/src/components/ui/ScrollArea.tsx and
+   bug #26. The utility classes below remain for the long tail of less
+   prominent overflow containers that want the native scrollbar hidden or
+   thinned without a full wrapper. */
+
+/* Radix ScrollArea wraps children in `<div style="display:table;min-width:100%">`
+   for its own size-detection. `display: table` breaks direct flex/grid
+   children (they become anonymous table rows and stop behaving like flex
+   items) and breaks percentage height inheritance. Force the sizer to
+   plain block so layout cascades through intact. `min-width: 100%` stays —
+   Radix uses it for horizontal-overflow detection. */
+[data-radix-scroll-area-viewport] > div {
+  display: block !important;
+}
+
 .scroll-hidden {
   scrollbar-width: none;
   -ms-overflow-style: none;
