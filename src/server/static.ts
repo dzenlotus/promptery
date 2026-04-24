@@ -14,7 +14,6 @@ export function mountUiStatic(app: Hono): boolean {
   if (!uiRoot) return false;
 
   const indexPath = join(uiRoot, "index.html");
-  const indexHtml = readFileSync(indexPath, "utf-8");
 
   // @hono/node-server's serveStatic resolves `root` relative to process.cwd(),
   // so convert absolute path to cwd-relative.
@@ -31,10 +30,16 @@ export function mountUiStatic(app: Hono): boolean {
   // SPA fallback for non-asset, non-API paths (e.g. /board/xyz for client-side routes).
   // Asset paths (anything with a file extension) must 404 if not served above — never
   // masquerade as index.html.
+  //
+  // index.html is read on every fallback request (not cached in a closure) —
+  // otherwise a hub that was started before `npm run build` keeps serving
+  // stale HTML with broken asset-hash references. The file is tiny (<1KB)
+  // and the SPA-fallback path isn't hot, so the fs hit is negligible.
   app.get("*", (c) => {
     const p = new URL(c.req.url).pathname;
     if (p.startsWith("/api") || p === "/ws" || p === "/health") return c.notFound();
     if (/\.[a-z0-9]+$/i.test(p)) return c.notFound();
+    const indexHtml = readFileSync(indexPath, "utf-8");
     return c.html(indexHtml);
   });
 
