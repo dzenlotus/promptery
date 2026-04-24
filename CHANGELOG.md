@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.2.1 — 2026-04-24
+
+### Fixed
+
+- **cmdk-based prompt/role pickers** no longer crash with `appendChild(null)`
+  on the first keystroke. Each `Command.Item` now carries a stable `value={id}`
+  with search text moved into `keywords`, and the flex-wrap item container is
+  marked with `cmdk-group-items=""` so cmdk's search-reorder has a valid
+  parent to reorder within. A root-level `<ErrorBoundary>` was added as a
+  safety net so a future subtree crash can't take down the whole UI.
+- **`get_task_bundle` XML** is now a well-formed document: wrapped in a single
+  `<context>` root, every tag balanced, and role prompts no longer duplicate
+  between `<role><prompts>` and `<inherited><board_role_prompts>` when the
+  active role is inherited from the board. The resolver-side contract
+  (direct > role > column > column-role > board > board-role) is unchanged.
+- **`index.html` stale-cache on SPA routes**. A hub started before
+  `npm run build` served a closure-cached HTML with dead asset-hash
+  references; rebuilds would leave `/board/:id` (and every other
+  client-side route) 404'ing on its own JS/CSS. `index.html` is now
+  re-read from disk per fallback request.
+
+### Added
+
+- **Dev/prod hub isolation.** `PROMPTERY_PORT` env var locks the hub to an
+  exact port (fails loud on EADDRINUSE, no silent fallback). Combined with
+  `PROMPTERY_HOME_DIR`, a dev hub can run alongside a production one
+  without sharing a DB. New `npm run dev` / `npm run dev:build` scripts
+  spawn a dev hub on 4322 with data in `./.dev-home/`. A `[DEV]` badge and
+  tab-title marker are surfaced via a new `GET /api/meta` endpoint whenever
+  a non-default home directory is active. Banner now also prints the
+  resolved home dir and DB path.
+- **Polished scrollbars** via a Radix-backed `<ScrollArea/>` component,
+  applied to the sidebar sections, kanban board (horizontal), kanban column
+  (vertical), prompt editor, and prompt-group view. Native scroll stays
+  under the hood — `@dnd-kit`'s auto-scroll keeps working — with a narrow
+  3px thumb that grows to 10px on hover and auto-hides after 900ms.
+- **`scripts/seed-dev.mjs`** — one-shot dev-hub seeder that creates 40
+  prompts, 12 roles, 3 boards and 40 tasks. Refuses to run unless the
+  target hub reports `devMode: true` to prevent accidental writes to a
+  production database.
+
 ## 0.2.0 — 2026-04-23
 
 ### Added
