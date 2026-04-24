@@ -36,11 +36,11 @@ export function buildContextBundle(
 
   const parts: string[] = [];
   const roleSection = renderRoleSection(task, ctx);
-  if (roleSection) parts.push(roleSection);
-  parts.push(renderTaskSection(task, ctx));
+  if (roleSection) parts.push(indent(roleSection, 1));
+  parts.push(indent(renderTaskSection(task, ctx), 1));
   const inheritedSection = renderInheritedSection(ctx);
-  if (inheritedSection) parts.push(inheritedSection);
-  return parts.join("\n\n");
+  if (inheritedSection) parts.push(indent(inheritedSection, 1));
+  return wrapElements("context", null, parts.join("\n\n"));
 }
 
 function synthesiseFromTask(task: TaskWithRelations): ResolvedTaskContext {
@@ -165,12 +165,26 @@ function renderTaskSection(
  * Prompts pulled from board-level and column-level sources (direct or via
  * their roles). Rendered as a sibling of `<task>` so agents can tell
  * workspace-wide context from task-specific identity.
+ *
+ * Prompts that belong to the active role are deliberately excluded here —
+ * `renderRoleSection` already emits them under `<role><prompts>`. Without
+ * this filter, a board-role whose role IS the active role shows up twice
+ * (once in `<role>`, once in `<inherited><board_role_prompts>`), doubling
+ * the XML size for the common "board supplies the active role" case.
  */
 function renderInheritedSection(ctx: ResolvedTaskContext): string | null {
+  const activeRoleId = ctx.role?.id;
+  const isActiveRolePrompt = (p: ResolvedPrompt): boolean =>
+    activeRoleId !== undefined && p.source?.id === activeRoleId;
+
   const boardPrompts = ctx.prompts.filter((p) => p.origin === "board");
-  const boardRolePrompts = ctx.prompts.filter((p) => p.origin === "board-role");
+  const boardRolePrompts = ctx.prompts.filter(
+    (p) => p.origin === "board-role" && !isActiveRolePrompt(p)
+  );
   const columnPrompts = ctx.prompts.filter((p) => p.origin === "column");
-  const columnRolePrompts = ctx.prompts.filter((p) => p.origin === "column-role");
+  const columnRolePrompts = ctx.prompts.filter(
+    (p) => p.origin === "column-role" && !isActiveRolePrompt(p)
+  );
 
   const groups: string[] = [];
   if (boardPrompts.length > 0) {

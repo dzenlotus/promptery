@@ -162,12 +162,20 @@ describe("get_task_bundle returns XML string", () => {
 
     const bundle = await call<string>("get_task_bundle", { id: task.id });
     expect(typeof bundle).toBe("string");
-    expect(bundle.startsWith("<role")).toBe(true);
+    // Bundle must be a well-formed XML document — single `<context>` root
+    // wrapping role + task + inherited. Without the root, a strict XML
+    // parser rejects the payload. See bug #15.
+    expect(bundle.startsWith("<context>")).toBe(true);
+    expect(bundle.trimEnd().endsWith("</context>")).toBe(true);
     expect(bundle).toContain("Shipping feature");
     expect(bundle).toContain("I am a helpful assistant");
     expect(bundle).toContain("role guidance");
     expect(bundle).toContain("direct guidance");
     expect(bundle).toContain("<direct_prompts>");
+    // role guidance must appear exactly once — duplicate rendering between
+    // <role><prompts> and <inherited> was the core of bug #15.
+    const matches = bundle.match(/role guidance/g) ?? [];
+    expect(matches).toHaveLength(1);
   });
 });
 
