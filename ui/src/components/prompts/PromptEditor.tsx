@@ -35,6 +35,12 @@ interface Props {
   ) => Promise<Prompt>;
   /** Called after a successful draft create so the view can switch selection. */
   onCreatedDraft?: (prompt: Prompt) => void;
+  /**
+   * Called whenever the editor's local form values change. Lets parent
+   * components observe draft content without controlling the field — used for
+   * the auto-save-on-navigate-away feature.
+   */
+  onValuesChange?: (values: EditorValues) => void;
 }
 
 interface EditorValues {
@@ -64,7 +70,7 @@ function valuesEqual(a: EditorValues, b: EditorValues): boolean {
   );
 }
 
-export function PromptEditor({ target, onCreate, onUpdate, onCreatedDraft }: Props) {
+export function PromptEditor({ target, onCreate, onUpdate, onCreatedDraft, onValuesChange }: Props) {
   const isDraft = target.kind === "draft";
   // Editor key swaps whenever the underlying target does, which forces the
   // Milkdown textarea to reset its uncontrolled state so we never see the
@@ -91,6 +97,16 @@ export function PromptEditor({ target, onCreate, onUpdate, onCreatedDraft }: Pro
       requestAnimationFrame(() => nameRef.current?.focus());
     }
   }, [isDraft, editorKey]);
+
+  // Notify parent of current values so it can auto-save on navigate-away.
+  // Only relevant in draft mode; the callback is intentionally excluded from
+  // deps so callers can pass an inline arrow without causing loops.
+  useEffect(() => {
+    if (isDraft && onValuesChange) {
+      onValuesChange(values);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDraft, values]);
 
   const isDirty = !valuesEqual(values, initial);
   const localNameError = validateEntityName(values.name);

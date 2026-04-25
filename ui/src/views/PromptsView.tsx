@@ -24,6 +24,24 @@ const EMPTY_DRAFT: PromptDraft = {
   color: DRAFT_COLOR,
 };
 
+const DRAFT_NAME_PREFIX = "prompt-draft-";
+
+/** Returns the next available draft name given the current list of prompts. */
+function nextDraftName(prompts: { name: string }[]): string {
+  const used = new Set(
+    prompts
+      .map((p) => p.name)
+      .filter((n) => n.startsWith(DRAFT_NAME_PREFIX))
+      .map((n) => {
+        const num = parseInt(n.slice(DRAFT_NAME_PREFIX.length), 10);
+        return isNaN(num) ? 0 : num;
+      })
+  );
+  let n = 1;
+  while (used.has(n)) n++;
+  return `${DRAFT_NAME_PREFIX}${n}`;
+}
+
 type Selection = { kind: "none" } | { kind: "draft" } | { kind: "saved"; id: string };
 
 export function PromptsView() {
@@ -53,6 +71,12 @@ export function PromptsView() {
     routeId ? { kind: "saved", id: routeId } : { kind: "none" }
   );
   const [hasDraft, setHasDraft] = useState(false);
+  /** Mirrors what the draft PromptEditor currently holds, updated via onValuesChange. */
+  const [draftValues, setDraftValues] = useState<{
+    name: string;
+    content: string;
+    color: string;
+  } | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Prompt | null>(null);
 
@@ -106,7 +130,28 @@ export function PromptsView() {
 
   // Navigating cleanly reflects the new selection in the URL so the
   // address bar doesn't lie about which prompt is open.
+  // When navigating away from an active draft, auto-save as a draft prompt
+  // if the user has typed anything (name or content). Empty forms are
+  // discarded silently.
   const goToSelection = (next: Selection) => {
+    if (selection.kind === "draft" && hasDraft && next.kind !== "draft") {
+      const name = draftValues?.name?.trim() ?? "";
+      const content = draftValues?.content ?? "";
+      const color = draftValues?.color ?? DRAFT_COLOR;
+      if (name.length > 0 || content.trim().length > 0) {
+        // Fire-and-forget: user doesn't wait, and navigation proceeds
+        // immediately. If the save fails we still navigate so the user
+        // isn't trapped. Toast on error.
+        const saveName = name.length > 0 ? name : nextDraftName(prompts);
+        createMutation.mutateAsync({ name: saveName, content, color, short_description: null }).then((created) => {
+          toast.success(`Saved as draft "${created.name}"`);
+        }).catch(() => {
+          // createMutation.onError already toasts; swallow here.
+        });
+      }
+      setHasDraft(false);
+      setDraftValues(null);
+    }
     setSelection(next);
     if (next.kind === "saved") {
       setLocation(`/prompts/${next.id}`);
@@ -118,6 +163,7 @@ export function PromptsView() {
 
   const handleCreateDraft = () => {
     setHasDraft(true);
+    setDraftValues({ name: "", content: "", color: DRAFT_COLOR });
     goToSelection({ kind: "draft" });
   };
 
@@ -186,8 +232,10 @@ export function PromptsView() {
           onUpdate={(id, patch) => updateMutation.mutateAsync({ id, patch })}
           onCreatedDraft={(p) => {
             setHasDraft(false);
+            setDraftValues(null);
             goToSelection({ kind: "saved", id: p.id });
           }}
+          onValuesChange={setDraftValues}
         />
       );
     }
