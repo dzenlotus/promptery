@@ -68,13 +68,26 @@ export function useWebSocket(): void {
           qc.invalidateQueries({ queryKey: ["task-context"] });
           break;
         case "task.created":
+          qc.invalidateQueries({ queryKey: qk.tasks(evt.data.boardId) });
+          // Seed the individual-task cache so the dialog is immediately fresh
+          // if opened after creation, without a separate round trip.
+          qc.setQueryData(qk.task(evt.data.task.id), evt.data.task);
+          break;
         case "task.updated":
+          // Refresh the board list (card view) AND the individual-task cache
+          // (dialog view) so both stay in sync when an agent or another tab
+          // calls update_task. task.updated carries the full updated task.
+          qc.invalidateQueries({ queryKey: qk.tasks(evt.data.boardId) });
+          qc.setQueryData(qk.task(evt.data.taskId), evt.data.task);
+          qc.invalidateQueries({ queryKey: qk.taskContext(evt.data.taskId) });
+          break;
         case "task.moved":
+          qc.invalidateQueries({ queryKey: qk.tasks(evt.data.boardId) });
+          qc.invalidateQueries({ queryKey: qk.task(evt.data.taskId) });
+          break;
         case "task.deleted":
           qc.invalidateQueries({ queryKey: qk.tasks(evt.data.boardId) });
-          if ("taskId" in evt.data) {
-            qc.invalidateQueries({ queryKey: qk.taskContext(evt.data.taskId) });
-          }
+          qc.removeQueries({ queryKey: qk.task(evt.data.taskId) });
           break;
         case "task.role_changed":
         case "task.prompt_added":
