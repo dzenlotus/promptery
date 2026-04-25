@@ -14,15 +14,36 @@ import { DEFAULT_COLUMN_NAMES } from "./queries/boards.js";
  * The paired SQL reference files live in `src/db/migrations/*.sql` for docs
  * and future DBA work, and may be loaded at runtime by their JS counterpart.
  */
-export function runMigrations(db: Database): void {
+export interface RunMigrationsOptions {
+  /**
+   * Default true. Tests set this to false to construct a "pre-FTS" DB
+   * snapshot, then run `runFTSMigration(db)` separately and assert backfill.
+   */
+  includeFTS?: boolean;
+}
+
+export function runMigrations(db: Database, opts: RunMigrationsOptions = {}): void {
+  const includeFTS = opts.includeFTS ?? true;
   ensureMigrationsTable(db);
   runMigration(db, "002_add_tag_kind", apply002AddTagKind);
   runMigration(db, "004_refactor_tags_to_typed_entities", apply004RefactorTags);
   runMigration(db, "005_settings", apply005Settings);
   runMigration(db, "006_inheritance", apply006Inheritance);
   runMigration(db, "007_prompt_groups", apply007PromptGroups);
-  runMigration(db, "008_tasks_fts", apply008TasksFts);
+  if (includeFTS) {
+    runMigration(db, "008_tasks_fts", apply008TasksFts);
+  }
   backfillDefaultColumnsForEmptyBoards(db);
+}
+
+/**
+ * Test seam: apply only the FTS migration on a DB that was previously
+ * initialised with `runMigrations(db, { includeFTS: false })`. Used to
+ * verify the backfill step correctly indexes pre-existing rows.
+ */
+export function runFTSMigration(db: Database): void {
+  ensureMigrationsTable(db);
+  runMigration(db, "008_tasks_fts", apply008TasksFts);
 }
 
 function ensureMigrationsTable(db: Database): void {

@@ -1,6 +1,6 @@
 {
   "name": "@dzenlotus/promptery",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Kanban-based context management for AI agents via MCP",
   "keywords": [
     "mcp",
@@ -68,6 +68,7 @@
     "@types/node": "25.6.0",
     "@types/proper-lockfile": "4.1.4",
     "@types/ws": "8.18.1",
+    "@vitest/coverage-v8": "^4.1.5",
     "tsx": "4.21.0",
     "typescript": "6.0.3",
     "vitest": "4.1.5"

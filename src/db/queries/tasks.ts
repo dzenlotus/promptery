@@ -230,8 +230,15 @@ function escapeFtsQuery(q: string): string {
  * a plain join ordered by created_at DESC. Filters (`board_id`, `column_id`,
  * `role_id`) compose with either path.
  */
+export const SEARCH_TASKS_DEFAULT_LIMIT = 20;
+export const SEARCH_TASKS_MAX_LIMIT = 500;
+
 export function searchTasks(db: Database, opts: SearchTasksOptions): TaskWithLocation[] {
-  const limit = opts.limit ?? 20;
+  // Defense-in-depth: the HTTP layer rejects limits > MAX with 400, but the
+  // repo also caps to keep direct callers (other server code, MCP bridges,
+  // bundle CLI) from accidentally pulling unbounded result sets.
+  const requested = opts.limit ?? SEARCH_TASKS_DEFAULT_LIMIT;
+  const limit = Math.min(Math.max(1, requested), SEARCH_TASKS_MAX_LIMIT);
   const conditions: string[] = [];
   const params: unknown[] = [];
   const hasQuery = !!(opts.query && opts.query.trim().length > 0);
@@ -280,7 +287,16 @@ export function searchTasks(db: Database, opts: SearchTasksOptions): TaskWithLoc
     sql += " AND " + conditions.join(" AND ");
   }
 
-  sql += hasQuery ? " ORDER BY rank LIMIT ?" : " ORDER BY t.created_at DESC LIMIT ?";
+  // FTS5 convention: bm25() returns negative scores where smaller (more
+  // negative) means a better match, and column weights work *inversely* —
+  // a lower weight makes hits in that column score MORE negative, i.e.
+  // rank higher. Empirically verified against this build: with weights
+  // [0.5, 5.0] for [title, description], a title-only hit consistently
+  // outranks a description-only hit and a both-columns hit beats either.
+  // Verified by `tasks-search.unit.test.ts > ordering`.
+  sql += hasQuery
+    ? " ORDER BY bm25(tasks_fts, 0.5, 5.0) LIMIT ?"
+    : " ORDER BY t.created_at DESC LIMIT ?";
   params.push(limit);
 
   const rows = db.prepare(sql).all(...(params as [unknown, ...unknown[]])) as JoinedRow[];

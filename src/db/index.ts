@@ -6,6 +6,16 @@ import { runMigrations } from "./migrations.js";
 
 let dbInstance: Database.Database | null = null;
 
+/**
+ * Test seam: replace the singleton with an externally-managed DB (typically
+ * an in-memory instance from `__tests__/helpers/testDb.ts`) so route handlers
+ * picking up `getDb()` operate on that DB instead of the production file.
+ * Pass `null` to clear the override. Production code never calls this.
+ */
+export function _setDbForTesting(db: Database.Database | null): void {
+  dbInstance = db;
+}
+
 export function getDb(): Database.Database {
   if (dbInstance) return dbInstance;
 

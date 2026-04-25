@@ -1,5 +1,61 @@
 # Changelog
 
+## 0.2.3 — 2026-04-25
+
+### Changed
+
+- **`search_tasks` ranking** now weights title hits above description hits.
+  Previously a query that matched once in either column ranked the same; with
+  the spec-driven test suite added in this release we discovered that
+  description-only matches could outrank title-only matches when the
+  description column happened to be shorter (FTS5's bm25 length
+  normalisation). The repo's `ORDER BY` was changed from default `rank` to
+  `bm25(tasks_fts, 0.5, 5.0)` so a hit in the title reliably ranks above a
+  hit in the body, while a hit in both still wins overall.
+- **`searchTasks()` repository function** now caps `limit` at 500
+  defensively. The HTTP layer already rejected larger limits with a 400 via
+  the Zod schema; the cap also guards direct callers (other server code,
+  bundle CLI) from accidentally requesting unbounded result sets.
+
+### Fixed
+
+- **Routing-order regression test**. `GET /api/tasks/search` is registered
+  ahead of `GET /api/tasks/:id` and now has dedicated regression tests
+  (status `200`, array body, query-string variant) so a future edit that
+  reorders the registrations fails fast instead of silently 404-ing search
+  requests as `task not found`.
+
+### Internal — testing infrastructure
+
+- New test infrastructure under `src/db/__tests__/helpers/`:
+  - `testDb.ts` — fresh `:memory:` SQLite per test with full schema +
+    migrations applied; `{ includeFTS: false }` constructs a pre-008
+    snapshot used to verify the migration's backfill step.
+  - `factories.ts` — `makeBoard / makeColumn / makeTask / makeRole /
+    seedWorkspace` factories so test files compose realistic scenarios
+    without re-implementing `INSERT` statements.
+- Three-layer coverage for the search/list/get-task surface:
+  - `tasks-search.unit.test.ts` — repository-level (38 tests): FTS sync
+    triggers (insert / update title / update description / delete / batch /
+    compound update / no-op update), query semantics (case sensitivity,
+    multi-word AND, miss tokens), special chars (hyphens, quotes,
+    apostrophes, Cyrillic, emoji, SQL-injection attempts), filters, limits,
+    result shape, ordering, `getTaskWithLocation`.
+  - `tasks-search.migration.test.ts` — backfill from a pre-FTS DB,
+    idempotence on re-run, post-migration triggers fire on new inserts.
+  - `tasks-search.integration.test.ts` — `app.fetch()` HTTP suite (16
+    tests) with per-test in-memory DB swapped via `_setDbForTesting`;
+    covers routing precedence, 400/404/200 paths, filter composition.
+  - `tasks-search.perf.test.ts` — 1000-row search and listing budget
+    under 100ms.
+- Two small production seams added to support the above:
+  - `runMigrations(db, { includeFTS?: boolean })` + `runFTSMigration(db)`.
+  - `_setDbForTesting(db | null)` on the DB singleton (replaces the
+    cached instance for `app.fetch()`-driven tests).
+- Added `@vitest/coverage-v8` dev dependency. Run `npm test -- --coverage`
+  to produce a v8 coverage report. The new repository code (`searchTasks`,
+  `getTaskWithLocation`) lands at 100% line coverage / 93% branch coverage.
+
 ## 0.2.2 — 2026-04-25
 
 ### Added
