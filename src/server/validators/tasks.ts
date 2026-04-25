@@ -23,7 +23,7 @@ export const updateTaskSchema = z.object({
 
 export const moveTaskSchema = z.object({
   column_id: z.string().min(1),
-  position: z.number().finite(),
+  position: z.number().finite().optional(),
 });
 
 export const setTaskRoleSchema = z.object({

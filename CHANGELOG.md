@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.2.4 — 2026-04-25
+
+### Added
+
+- **Cross-board `move_task`.** The `move_task` MCP tool (and the underlying
+  `POST /api/tasks/:id/move` endpoint) now accepts a target column on any
+  board, not just the task's current board. Previously cross-board calls
+  returned `400 column does not belong to this board`, which forced a
+  destructive delete-and-recreate to reorganise tasks. Semantics are
+  intentionally narrow: task-owned data (`role_id`, direct
+  `task_prompts/skills/mcp_tools`) travels with the task; inherited
+  context (board-level and column-level prompts/roles, plus
+  role-via-board / role-via-column) does NOT — the resolver picks up the
+  new location's context on the next read. The denormalised
+  `tasks.board_id` is updated from the target column so per-board listings
+  remain consistent. `position` is now optional on the `/move` route — if
+  omitted, the task is appended to the end of the target column
+  (`MAX(position) + 1`), matching `createTask`'s rule.
+- `makePrompt` test factory in `src/db/__tests__/helpers/factories.ts`.
+
+### Internal
+
+- New `tasks-move.unit.test.ts` (queries-level, 8 tests) and
+  `tasks-move.integration.test.ts` (HTTP, 5 tests) cover cross-board moves,
+  role-id preservation (set vs NULL), direct-prompt preservation,
+  append-to-end position, explicit-position pass-through, 404 on missing
+  column or task, and same-board reorder regression.
+
 ## 0.2.3 — 2026-04-25
 
 ### Changed

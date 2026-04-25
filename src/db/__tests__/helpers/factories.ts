@@ -133,6 +133,29 @@ export function makeTask(db: Database, opts: MakeTaskOptions): MadeTask {
   };
 }
 
+export interface MakePromptOptions {
+  id?: string;
+  name?: string;
+  content?: string;
+}
+
+export interface MadePrompt {
+  id: string;
+  name: string;
+  content: string;
+}
+
+export function makePrompt(db: Database, opts: MakePromptOptions = {}): MadePrompt {
+  const id = opts.id ?? nanoid();
+  const name = opts.name ?? `Prompt ${id.slice(0, 6)}`;
+  const content = opts.content ?? "";
+  const now = Date.now();
+  db.prepare(
+    "INSERT INTO prompts (id, name, content, color, created_at, updated_at) VALUES (?, ?, ?, '#888', ?, ?)"
+  ).run(id, name, content, now, now);
+  return { id, name, content };
+}
+
 export interface MakeRoleOptions {
   id?: string;
   name?: string;

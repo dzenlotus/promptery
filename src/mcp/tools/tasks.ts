@@ -198,7 +198,8 @@ export const update_task: ToolDefinition = {
 
 export const move_task: ToolDefinition = {
   name: "move_task",
-  description: "Move a task to another column and/or reorder it within a column.",
+  description:
+    "Move a task to another column. The target column may be on the same board OR a different board (cross-board moves are supported). Task-owned data is preserved: role_id (if explicitly set on the task) and direct prompts/skills/mcp_tools attached via add_task_prompt etc. Inherited context — board-level and column-level prompts/roles — is NOT carried; the task picks up the new location's context via the resolver. Use this for reorder-within-column too.",
   inputSchema: {
     type: "object",
     properties: {
@@ -214,12 +215,11 @@ export const move_task: ToolDefinition = {
     additionalProperties: false,
   },
   handler: async (args, { hub }) => {
-    const position =
-      typeof args.position === "number" ? args.position : Number.MAX_SAFE_INTEGER;
-    return hub.post(`/api/tasks/${args.id as string}/move`, {
+    const body: { column_id: string; position?: number } = {
       column_id: args.column_id as string,
-      position,
-    });
+    };
+    if (typeof args.position === "number") body.position = args.position;
+    return hub.post(`/api/tasks/${args.id as string}/move`, body);
   },
 };
 

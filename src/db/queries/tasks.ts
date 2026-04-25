@@ -149,13 +149,47 @@ export function updateTask(db: Database, id: string, input: UpdateTaskInput): Ta
   return getRawTask(db, id);
 }
 
+/**
+ * Move a task to any column — same board OR a different board. Updates the
+ * denormalised `tasks.board_id` from the target column so per-board listings
+ * stay consistent. Task-owned data (role_id, task_prompts/skills/mcp_tools)
+ * is intentionally untouched: it travels with the task. Inherited context
+ * (board/column-level prompts, board/column-level role) re-resolves at the
+ * new location via the resolver.
+ *
+ * Returns null if the task does not exist. Does not validate column
+ * existence — the caller is expected to have done that and surface a 404.
+ */
 export function moveTask(
   db: Database,
   id: string,
   targetColumnId: string,
-  targetPosition: number
+  targetPosition?: number
 ): Task | null {
-  return updateTask(db, id, { column_id: targetColumnId, position: targetPosition });
+  const colRow = db
+    .prepare("SELECT board_id FROM columns WHERE id = ?")
+    .get(targetColumnId) as { board_id: string } | undefined;
+  if (!colRow) return null;
+
+  let position = targetPosition;
+  if (position === undefined) {
+    const row = db
+      .prepare(
+        "SELECT COALESCE(MAX(position), 0) + 1 AS next FROM tasks WHERE column_id = ?"
+      )
+      .get(targetColumnId) as { next: number };
+    position = row.next;
+  }
+
+  const result = db
+    .prepare(
+      `UPDATE tasks
+         SET column_id = ?, board_id = ?, position = ?, updated_at = ?
+       WHERE id = ?`
+    )
+    .run(targetColumnId, colRow.board_id, position, Date.now(), id);
+  if (result.changes === 0) return null;
+  return getRawTask(db, id);
 }
 
 export function deleteTask(db: Database, id: string): boolean {

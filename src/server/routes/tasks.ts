@@ -130,14 +130,17 @@ tasksRoute.post("/:id/move", zValidator("json", moveTaskSchema), (c) => {
   const existing = q.getTask(getDb(), id);
   if (!existing) return c.json({ error: "task not found" }, 404);
   const column = q.getColumn(getDb(), column_id);
-  if (!column || column.board_id !== existing.board_id) {
-    return c.json({ error: "column does not belong to this board" }, 400);
-  }
+  if (!column) return c.json({ error: "column not found" }, 404);
   const moved = q.moveTask(getDb(), id, column_id, position);
   if (!moved) return c.json({ error: "task not found" }, 404);
   bus.publish({
     type: "task.moved",
-    data: { boardId: moved.board_id, taskId: moved.id, columnId: column_id, position },
+    data: {
+      boardId: moved.board_id,
+      taskId: moved.id,
+      columnId: column_id,
+      position: moved.position,
+    },
   });
   return c.json(q.getTask(getDb(), id));
 });
