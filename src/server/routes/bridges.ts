@@ -11,6 +11,10 @@ import {
 const registerSchema = z.object({
   pid: z.number().int(),
   agent_hint: z.string().optional().nullable(),
+  /** Convenience: single role id to scope this bridge to. */
+  role_id: z.string().optional().nullable(),
+  /** List of role ids to scope this bridge to (union with role_id if both given). */
+  role_ids: z.array(z.string()).optional().nullable(),
 });
 
 const app = new Hono();

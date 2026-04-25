@@ -20,8 +20,10 @@ export const list_tasks: ToolDefinition = {
   name: "list_tasks",
   description:
     "List tasks on a board with their slug + column position. Returns navigation " +
-    "metadata only — no description, no role content, no prompts. Call get_task " +
-    "for the location envelope or get_task_bundle for the full XML system prompt.",
+    "metadata only — no description, no role content, no prompts. Optionally " +
+    "filter by column, or restrict to tasks assigned to this bridge's " +
+    "registered role(s) via `assigned_to_role: 'self'`. Call get_task for the " +
+    "location envelope or get_task_bundle for the full XML system prompt.",
   inputSchema: {
     type: "object",
     properties: {
@@ -30,15 +32,22 @@ export const list_tasks: ToolDefinition = {
         type: "string",
         description: "Optional — restrict to a single column.",
       },
+      assigned_to_role: {
+        type: "string",
+        enum: ["self"],
+        description:
+          "Pass 'self' to return only tasks whose role_id matches the role(s) this bridge registered with. Requires the bridge to have been registered with role_id or role_ids. If no role scope was set, returns all tasks.",
+      },
     },
     required: ["board_id"],
     additionalProperties: false,
   },
   handler: async (args, { hub }) => {
-    const path =
-      typeof args.column_id === "string"
-        ? `/api/boards/${args.board_id as string}/tasks?column_id=${encodeURIComponent(args.column_id)}`
-        : `/api/boards/${args.board_id as string}/tasks`;
+    const params = new URLSearchParams();
+    if (typeof args.column_id === "string") params.set("column_id", args.column_id);
+    if (args.assigned_to_role === "self") params.set("assigned_to_role", "self");
+    const qs = params.toString();
+    const path = `/api/boards/${args.board_id as string}/tasks${qs ? `?${qs}` : ""}`;
     return projectTaskList(await hub.get(path));
   },
 };

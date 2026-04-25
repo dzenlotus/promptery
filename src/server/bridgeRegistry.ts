@@ -4,6 +4,8 @@ export interface BridgeInfo {
   id: string;
   pid: number;
   agent_hint: string | null;
+  /** Role ids this bridge is interested in. Empty array = all roles (default). */
+  role_ids: string[];
   registered_at: number;
   last_seen: number;
 }
@@ -16,20 +18,41 @@ const SWEEP_INTERVAL_MS = 60_000;
 export interface RegisterBridgeInput {
   pid: number;
   agent_hint?: string | null;
+  /** Optional single role id — convenience shorthand for role_ids: [role_id]. */
+  role_id?: string | null;
+  /** Optional list of role ids this bridge should be scoped to. */
+  role_ids?: string[] | null;
 }
 
 export function registerBridge(input: RegisterBridgeInput): BridgeInfo {
   const id = nanoid(10);
   const now = Date.now();
+  // Merge role_id (singular convenience) with role_ids (list).
+  const merged = new Set<string>();
+  if (input.role_id) merged.add(input.role_id);
+  if (Array.isArray(input.role_ids)) {
+    for (const r of input.role_ids) if (r) merged.add(r);
+  }
   const bridge: BridgeInfo = {
     id,
     pid: input.pid,
     agent_hint: input.agent_hint ?? null,
+    role_ids: Array.from(merged),
     registered_at: now,
     last_seen: now,
   };
   bridges.set(id, bridge);
   return bridge;
+}
+
+/**
+ * Look up the role_ids for a registered bridge by id.
+ * Returns null if the bridge is not found.
+ */
+export function getBridgeRoleIds(bridgeId: string): string[] | null {
+  const bridge = bridges.get(bridgeId);
+  if (!bridge) return null;
+  return bridge.role_ids;
 }
 
 export function heartbeat(id: string): boolean {

@@ -11,10 +11,11 @@ export class HubClient {
 
   constructor(public readonly baseUrl: string) {}
 
-  async register(agentHint?: string | null): Promise<void> {
+  async register(agentHint?: string | null, roleIds?: string[]): Promise<void> {
     const res = await this.post<{ id: string }>("/api/bridges/register", {
       pid: process.pid,
       agent_hint: agentHint ?? null,
+      role_ids: roleIds && roleIds.length > 0 ? roleIds : undefined,
     });
     this.bridgeId = res.id;
     this.heartbeatTimer = setInterval(() => {
@@ -41,14 +42,14 @@ export class HubClient {
   }
 
   async get<T>(path: string): Promise<T> {
-    const res = await fetch(this.url(path));
+    const res = await fetch(this.url(path), { headers: this.bridgeHeaders() });
     return this.parseJson<T>(res, "GET", path);
   }
 
   async post<T>(path: string, body: unknown): Promise<T> {
     const res = await fetch(this.url(path), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...this.bridgeHeaders() },
       body: JSON.stringify(body),
     });
     return this.parseJson<T>(res, "POST", path);
@@ -57,7 +58,7 @@ export class HubClient {
   async patch<T>(path: string, body: unknown): Promise<T> {
     const res = await fetch(this.url(path), {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...this.bridgeHeaders() },
       body: JSON.stringify(body),
     });
     return this.parseJson<T>(res, "PATCH", path);
@@ -66,20 +67,23 @@ export class HubClient {
   async put<T>(path: string, body: unknown): Promise<T> {
     const res = await fetch(this.url(path), {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...this.bridgeHeaders() },
       body: JSON.stringify(body),
     });
     return this.parseJson<T>(res, "PUT", path);
   }
 
   async delete<T>(path: string): Promise<T> {
-    const res = await fetch(this.url(path), { method: "DELETE" });
+    const res = await fetch(this.url(path), {
+      method: "DELETE",
+      headers: this.bridgeHeaders(),
+    });
     return this.parseJson<T>(res, "DELETE", path);
   }
 
   /** Raw text response — for endpoints like /bundle that return XML. */
   async getText(path: string): Promise<string> {
-    const res = await fetch(this.url(path));
+    const res = await fetch(this.url(path), { headers: this.bridgeHeaders() });
     if (!res.ok) {
       throw new Error(
         `GET ${path}: ${res.status} ${res.statusText} ${await res.text()}`
@@ -90,6 +94,12 @@ export class HubClient {
 
   private url(path: string): string {
     return `${this.baseUrl}${path}`;
+  }
+
+  /** Returns `X-Bridge-Id` header when the bridge is registered. */
+  private bridgeHeaders(): Record<string, string> {
+    if (!this.bridgeId) return {};
+    return { "X-Bridge-Id": this.bridgeId };
   }
 
   private async parseJson<T>(

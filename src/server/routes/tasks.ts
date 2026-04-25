@@ -15,6 +15,7 @@ import {
 import { bus } from "../events/bus.js";
 import { buildContextBundle } from "../../lib/context.js";
 import { resolveTaskContext } from "../../db/inheritance/index.js";
+import { getBridgeRoleIds } from "../bridgeRegistry.js";
 
 export const boardTasksRoute = new Hono();
 
@@ -22,7 +23,26 @@ boardTasksRoute.get("/:boardId/tasks", (c) => {
   const boardId = c.req.param("boardId");
   if (!q.getBoard(getDb(), boardId)) return c.json({ error: "board not found" }, 404);
   const columnId = c.req.query("column_id");
-  return c.json(q.listTasks(getDb(), boardId, columnId));
+  const assignedToRole = c.req.query("assigned_to_role");
+
+  let tasks = q.listTasks(getDb(), boardId, columnId);
+
+  // When assigned_to_role=self the bridge wants only tasks whose role_id is
+  // in its registered role set. Resolve the caller's role_ids from the
+  // X-Bridge-Id header; if the bridge isn't found or has no role_ids scoped,
+  // fall back to the unfiltered list so existing behaviour is preserved.
+  if (assignedToRole === "self") {
+    const bridgeId = c.req.header("X-Bridge-Id");
+    if (bridgeId) {
+      const roleIds = getBridgeRoleIds(bridgeId);
+      if (roleIds && roleIds.length > 0) {
+        const roleSet = new Set(roleIds);
+        tasks = tasks.filter((t) => t.role_id !== null && roleSet.has(t.role_id));
+      }
+    }
+  }
+
+  return c.json(tasks);
 });
 
 boardTasksRoute.post("/:boardId/tasks", zValidator("json", createTaskSchema), (c) => {
