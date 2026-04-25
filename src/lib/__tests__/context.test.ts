@@ -57,6 +57,7 @@ describe("buildContextBundle", () => {
             name: "comments-english",
             content: "write comments in English",
             color: "#888",
+            short_description: null,
             created_at: 0,
             updated_at: 0,
             origin: "role:role1",
@@ -136,6 +137,7 @@ describe("buildContextBundle", () => {
             name: "from-role",
             content: "x",
             color: "#888",
+            short_description: null,
             created_at: 0,
             updated_at: 0,
             origin: "role:r1",
@@ -145,6 +147,7 @@ describe("buildContextBundle", () => {
             name: "task-only",
             content: "y",
             color: "#888",
+            short_description: null,
             created_at: 0,
             updated_at: 0,
             origin: "direct",
@@ -194,6 +197,35 @@ describe("buildContextBundle", () => {
     expect(xml).toContain('title="A &amp; &quot;B&quot; &lt;C&gt;"');
     // `>` stays unescaped in body text so markdown blockquotes survive.
     expect(xml).toContain("use foo &amp; &lt;bar> > quote");
+  });
+
+  it("emits desc attribute when short_description is set, omits it when null", () => {
+    const ctx: ResolvedTaskContext = {
+      task_id: "t1",
+      role: null,
+      prompts: [
+        {
+          id: "pa",
+          name: "with-desc",
+          content: "body",
+          color: null,
+          short_description: "Quick summary.",
+          origin: "direct",
+        },
+        {
+          id: "pb",
+          name: "no-desc",
+          content: "body2",
+          color: null,
+          short_description: null,
+          origin: "direct",
+        },
+      ],
+    };
+    const xml = buildContextBundle(makeTask(), ctx);
+    expect(xml).toContain('<prompt name="with-desc" desc="Quick summary.">');
+    expect(xml).toContain('<prompt name="no-desc">');
+    expect(xml).not.toContain('desc=""');
   });
 });
 

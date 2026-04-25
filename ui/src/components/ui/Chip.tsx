@@ -1,6 +1,7 @@
 import { forwardRef, type CSSProperties, type HTMLAttributes } from "react";
 import { X } from "lucide-react";
 import { cn } from "../../lib/cn.js";
+import { Tooltip } from "./Tooltip.js";
 
 interface Props extends Omit<HTMLAttributes<HTMLSpanElement>, "children"> {
   name: string;
@@ -37,11 +38,10 @@ export const Chip = forwardRef<HTMLSpanElement, Props>(function Chip(
   const sizeCls =
     size === "sm" ? "h-5 px-1.5 gap-1 text-[11px]" : "h-6 px-2 gap-1.5 text-[12px]";
   const mergedStyle: CSSProperties = { borderColor: `${tint}55`, ...style };
-  return (
+  const chipEl = (
     <span
       ref={ref}
       data-testid={testId}
-      title={tooltip}
       className={cn(
         "inline-flex items-center rounded-full bg-[var(--hover-overlay)] text-[var(--color-text)]",
         "border border-[var(--color-border)]",
@@ -75,4 +75,8 @@ export const Chip = forwardRef<HTMLSpanElement, Props>(function Chip(
       ) : null}
     </span>
   );
+  if (tooltip) {
+    return <Tooltip content={tooltip}>{chipEl}</Tooltip>;
+  }
+  return chipEl;
 });

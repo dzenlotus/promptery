@@ -395,6 +395,11 @@ function SortableMemberRow({
           />
           <h3 className="text-[14px] font-medium truncate">{prompt.name}</h3>
         </div>
+        {prompt.short_description && (
+          <p className="text-[12px] text-[var(--color-text-subtle)] mb-1 line-clamp-1">
+            {prompt.short_description}
+          </p>
+        )}
         {prompt.content.trim().length > 0 && (
           <p className="text-[12px] text-[var(--color-text-muted)] line-clamp-2 whitespace-pre-wrap">
             {prompt.content}

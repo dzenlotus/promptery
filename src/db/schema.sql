@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS prompts (
   name TEXT NOT NULL UNIQUE,
   content TEXT NOT NULL DEFAULT '',
   color TEXT DEFAULT '#888',
+  short_description TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );

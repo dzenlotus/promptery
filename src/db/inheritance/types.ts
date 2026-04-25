@@ -41,6 +41,7 @@ export interface ResolvedPrompt {
   name: string;
   content: string;
   color: string | null;
+  short_description?: string | null;
   origin: PromptOrigin;
   /** Non-null for every origin except "direct". Surfaces the carrier's name
    * so the UI can show "inherited from Backend Engineer role" tooltips. */

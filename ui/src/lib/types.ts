@@ -55,6 +55,10 @@ export interface Prompt {
   name: string;
   content: string;
   color: string;
+  /** Tooltip text on hover; null when not set. Optional in the type so
+   *  existing fixtures and Role/Skill/McpTool aliases (which don't
+   *  surface this field in the UI today) keep compiling. */
+  short_description?: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -121,6 +125,7 @@ export interface CreatePrimitiveInput {
   name: string;
   content?: string;
   color?: string;
+  short_description?: string | null;
 }
 
 export type UpdatePrimitiveInput = Partial<CreatePrimitiveInput>;
@@ -144,6 +149,7 @@ export interface PromptInGroup {
   name: string;
   content: string;
   color: string | null;
+  short_description?: string | null;
   position: number;
 }
 

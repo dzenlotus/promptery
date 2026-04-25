@@ -37,6 +37,7 @@ export function runMigrations(db: Database, opts: RunMigrationsOptions = {}): vo
   }
   runMigration(db, "009_spaces", apply009Spaces);
   runMigration(db, "010_board_position", apply010BoardPosition);
+  runMigration(db, "011_prompt_short_description", apply011PromptShortDescription);
   backfillDefaultColumnsForEmptyBoards(db);
 }
 
@@ -535,6 +536,19 @@ function apply010BoardPosition(db: Database): void {
   db.exec(
     "CREATE INDEX IF NOT EXISTS idx_boards_space_position ON boards(space_id, position)"
   );
+}
+
+/**
+ * Apply 011: add short_description column to prompts table.
+ *
+ * Idempotent: only runs the ALTER if the column is missing (fresh installs
+ * already have it via schema.sql).
+ */
+function apply011PromptShortDescription(db: Database): void {
+  const cols = db.prepare("PRAGMA table_info(prompts)").all() as { name: string }[];
+  if (!cols.some((c) => c.name === "short_description")) {
+    db.exec("ALTER TABLE prompts ADD COLUMN short_description TEXT");
+  }
 }
 
 /**

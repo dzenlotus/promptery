@@ -35,6 +35,37 @@ describe("prompts queries", () => {
     expect(p.color).toBe("#888");
   });
 
+  it("defaults short_description to null", () => {
+    const db = createTestDb();
+    const p = createPrompt(db, { name: "bare-desc" });
+    expect(p.short_description).toBeNull();
+  });
+
+  it("stores and returns short_description on create", () => {
+    const db = createTestDb();
+    const p = createPrompt(db, { name: "with-desc", short_description: "A short blurb." });
+    expect(p.short_description).toBe("A short blurb.");
+    expect(getPrompt(db, p.id)?.short_description).toBe("A short blurb.");
+  });
+
+  it("updates short_description and can clear it", () => {
+    const db = createTestDb();
+    const p = createPrompt(db, { name: "upd-desc", short_description: "Initial." });
+
+    const updated = updatePrompt(db, p.id, { short_description: "Updated." });
+    expect(updated?.short_description).toBe("Updated.");
+
+    const cleared = updatePrompt(db, p.id, { short_description: null });
+    expect(cleared?.short_description).toBeNull();
+  });
+
+  it("leaves short_description unchanged when not in the patch", () => {
+    const db = createTestDb();
+    const p = createPrompt(db, { name: "no-patch", short_description: "Keep me." });
+    const updated = updatePrompt(db, p.id, { content: "new body" });
+    expect(updated?.short_description).toBe("Keep me.");
+  });
+
   it("rejects duplicate names via ConflictError", () => {
     const db = createTestDb();
     createPrompt(db, { name: "x" });

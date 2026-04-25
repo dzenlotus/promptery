@@ -8,6 +8,7 @@ import { PromptGroupsList } from "./PromptGroupsList.js";
 import { PromptGroupDialog } from "./PromptGroupDialog.js";
 import { PromptGroupDeleteDialog } from "./PromptGroupDeleteDialog.js";
 import { DraggablePromptRow } from "./DraggablePromptRow.js";
+import { Tooltip } from "../ui/Tooltip.js";
 import type { Prompt, PromptGroup } from "../../lib/types.js";
 
 interface Props {
@@ -111,20 +112,21 @@ export function PromptsSidebarList({
             )}
             {prompts.map((p) => {
               const row = (
-                <EntityRow
-                  key={p.id}
-                  item={p}
-                  selected={selectedId === p.id}
-                  isRenaming={renamingId === p.id}
-                  onSelect={() => onSelect(p.id)}
-                  onRequestRename={() => onRequestRename(p.id)}
-                  commitRename={(n) => onCommitRename(p.id, n)}
-                  cancelRename={onCancelRename}
-                  onColorPick={(c) => onColorPick(p.id, c)}
-                  onDuplicate={() => onDuplicate(p.id)}
-                  onDelete={() => onDelete(p.id)}
-                  testIdPrefix="prompt-row"
-                />
+                <Tooltip key={p.id} content={p.short_description ?? ""} side="right">
+                  <EntityRow
+                    item={p}
+                    selected={selectedId === p.id}
+                    isRenaming={renamingId === p.id}
+                    onSelect={() => onSelect(p.id)}
+                    onRequestRename={() => onRequestRename(p.id)}
+                    commitRename={(n) => onCommitRename(p.id, n)}
+                    cancelRename={onCancelRename}
+                    onColorPick={(c) => onColorPick(p.id, c)}
+                    onDuplicate={() => onDuplicate(p.id)}
+                    onDelete={() => onDelete(p.id)}
+                    testIdPrefix="prompt-row"
+                  />
+                </Tooltip>
               );
               return draggable ? (
                 <DraggablePromptRow key={p.id} promptId={p.id}>

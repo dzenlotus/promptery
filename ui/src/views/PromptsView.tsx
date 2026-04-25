@@ -78,7 +78,7 @@ export function PromptsView() {
   };
 
   const createMutation = useMutation({
-    mutationFn: (data: { name: string; content: string; color: string }) =>
+    mutationFn: (data: { name: string; content: string; color: string; short_description: string | null }) =>
       api.prompts.create(data),
     onSuccess: (created) => {
       // Seed the list so selecting the brand-new prompt doesn't flash the
@@ -153,6 +153,7 @@ export function PromptsView() {
         name: `${current.name} copy`,
         content: current.content,
         color: current.color,
+        short_description: current.short_description ?? null,
       });
       goToSelection({ kind: "saved", id: dup.id });
     } catch {

@@ -31,6 +31,7 @@ interface PromptRow {
   name: string;
   content: string;
   color: string | null;
+  short_description: string | null;
 }
 
 /**
@@ -96,7 +97,7 @@ function resolvePrompts(
   // 1. Direct on the task.
   const directPrompts = db
     .prepare(
-      `SELECT p.id, p.name, p.content, p.color
+      `SELECT p.id, p.name, p.content, p.color, p.short_description
        FROM task_prompts tp
        JOIN prompts p ON p.id = tp.prompt_id
        WHERE tp.task_id = ? AND tp.origin = 'direct'
@@ -131,7 +132,7 @@ function resolvePrompts(
   // 3. Direct prompts on the column.
   const columnPrompts = db
     .prepare(
-      `SELECT p.id, p.name, p.content, p.color
+      `SELECT p.id, p.name, p.content, p.color, p.short_description
        FROM column_prompts cp
        JOIN prompts p ON p.id = cp.prompt_id
        WHERE cp.column_id = ?
@@ -167,7 +168,7 @@ function resolvePrompts(
   // 5. Direct prompts on the board.
   const boardPrompts = db
     .prepare(
-      `SELECT p.id, p.name, p.content, p.color
+      `SELECT p.id, p.name, p.content, p.color, p.short_description
        FROM board_prompts bp
        JOIN prompts p ON p.id = bp.prompt_id
        WHERE bp.board_id = ?
@@ -228,7 +229,7 @@ function fetchRoleRow(db: Database, id: string): RoleRow | null {
 function selectRolePrompts(db: Database, roleId: string): PromptRow[] {
   return db
     .prepare(
-      `SELECT p.id, p.name, p.content, p.color
+      `SELECT p.id, p.name, p.content, p.color, p.short_description
        FROM role_prompts rp
        JOIN prompts p ON p.id = rp.prompt_id
        WHERE rp.role_id = ?

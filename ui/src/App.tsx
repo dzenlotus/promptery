@@ -4,6 +4,7 @@ import { BackgroundLayer } from "./background/BackgroundLayer.js";
 import { Canvas } from "./layout/Canvas.js";
 import { ThemeProvider } from "./providers/ThemeProvider.js";
 import { ThemedToaster } from "./providers/ThemedToaster.js";
+import { TooltipProvider } from "./components/ui/Tooltip.js";
 import { DevModeIndicator } from "./components/DevModeIndicator.js";
 import { ErrorBoundary } from "./components/ErrorBoundary.js";
 import { KanbanView } from "./views/KanbanView.js";
@@ -58,14 +59,16 @@ export function App() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
-          <BackgroundLayer />
-          <Canvas>
-            <ErrorBoundary>
-              <Routed />
-            </ErrorBoundary>
-          </Canvas>
-          <DevModeIndicator />
-          <ThemedToaster />
+          <TooltipProvider>
+            <BackgroundLayer />
+            <Canvas>
+              <ErrorBoundary>
+                <Routed />
+              </ErrorBoundary>
+            </Canvas>
+            <DevModeIndicator />
+            <ThemedToaster />
+          </TooltipProvider>
         </ThemeProvider>
       </QueryClientProvider>
     </ErrorBoundary>

@@ -61,6 +61,7 @@ function synthesiseFromTask(task: TaskWithRelations): ResolvedTaskContext {
       name: p.name,
       content: p.content,
       color: p.color ?? null,
+      short_description: p.short_description ?? null,
       origin: isRoleInherited ? "role" : "direct",
     };
     // Keep a source pointer when the origin carries one so the role-section
@@ -105,7 +106,7 @@ function renderRoleSection(
         renderPrimitiveGroup(
           "prompts",
           "prompt",
-          rolePrompts.map((p) => ({ name: p.name, content: p.content }))
+          rolePrompts.map((p) => ({ name: p.name, content: p.content, short_description: p.short_description ?? null }))
         ),
         1
       )
@@ -139,7 +140,7 @@ function renderTaskSection(
         renderPrimitiveGroup(
           "direct_prompts",
           "prompt",
-          directPrompts.map((p) => ({ name: p.name, content: p.content }))
+          directPrompts.map((p) => ({ name: p.name, content: p.content, short_description: p.short_description ?? null }))
         ),
         1
       )
@@ -193,7 +194,7 @@ function renderInheritedSection(ctx: ResolvedTaskContext): string | null {
         renderPrimitiveGroup(
           "board_prompts",
           "prompt",
-          boardPrompts.map((p) => ({ name: p.name, content: p.content }))
+          boardPrompts.map((p) => ({ name: p.name, content: p.content, short_description: p.short_description ?? null }))
         ),
         1
       )
@@ -205,7 +206,7 @@ function renderInheritedSection(ctx: ResolvedTaskContext): string | null {
         renderPrimitiveGroup(
           "board_role_prompts",
           "prompt",
-          boardRolePrompts.map((p) => ({ name: p.name, content: p.content }))
+          boardRolePrompts.map((p) => ({ name: p.name, content: p.content, short_description: p.short_description ?? null }))
         ),
         1
       )
@@ -217,7 +218,7 @@ function renderInheritedSection(ctx: ResolvedTaskContext): string | null {
         renderPrimitiveGroup(
           "column_prompts",
           "prompt",
-          columnPrompts.map((p) => ({ name: p.name, content: p.content }))
+          columnPrompts.map((p) => ({ name: p.name, content: p.content, short_description: p.short_description ?? null }))
         ),
         1
       )
@@ -229,7 +230,7 @@ function renderInheritedSection(ctx: ResolvedTaskContext): string | null {
         renderPrimitiveGroup(
           "column_role_prompts",
           "prompt",
-          columnRolePrompts.map((p) => ({ name: p.name, content: p.content }))
+          columnRolePrompts.map((p) => ({ name: p.name, content: p.content, short_description: p.short_description ?? null }))
         ),
         1
       )
@@ -243,6 +244,7 @@ function renderInheritedSection(ctx: ResolvedTaskContext): string | null {
 interface PrimitiveLike {
   name: string;
   content: string;
+  short_description?: string | null;
 }
 
 function renderPrimitiveGroup(
@@ -251,7 +253,11 @@ function renderPrimitiveGroup(
   items: PrimitiveLike[]
 ): string {
   const rendered = items
-    .map((item) => indent(wrapText(itemTag, { name: item.name }, item.content), 1))
+    .map((item) => {
+      const attrs: Record<string, string> = { name: item.name };
+      if (item.short_description) attrs.desc = item.short_description;
+      return indent(wrapText(itemTag, attrs, item.content), 1);
+    })
     .join("\n");
   return wrapElements(groupTag, null, rendered);
 }

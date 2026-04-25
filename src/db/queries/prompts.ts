@@ -7,6 +7,7 @@ export interface Prompt {
   name: string;
   content: string;
   color: string;
+  short_description: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -15,12 +16,14 @@ export interface CreatePromptInput {
   name: string;
   content?: string;
   color?: string;
+  short_description?: string | null;
 }
 
 export interface UpdatePromptInput {
   name?: string;
   content?: string;
   color?: string;
+  short_description?: string | null;
 }
 
 export function listPrompts(db: Database): Prompt[] {
@@ -47,10 +50,11 @@ export function createPrompt(db: Database, input: CreatePromptInput): Prompt {
   const now = Date.now();
   const content = input.content ?? "";
   const color = input.color ?? "#888";
+  const short_description = input.short_description ?? null;
   db.prepare(
-    "INSERT INTO prompts (id, name, content, color, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)"
-  ).run(id, input.name, content, color, now, now);
-  return { id, name: input.name, content, color, created_at: now, updated_at: now };
+    "INSERT INTO prompts (id, name, content, color, short_description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+  ).run(id, input.name, content, color, short_description, now, now);
+  return { id, name: input.name, content, color, short_description, created_at: now, updated_at: now };
 }
 
 export function updatePrompt(
@@ -72,13 +76,19 @@ export function updatePrompt(
   const name = input.name ?? current.name;
   const content = input.content ?? current.content;
   const color = input.color ?? current.color;
+  // `undefined` means "not in the patch" — keep current value.
+  // `null` means "clear it". Empty string is treated as null (no description).
+  const short_description =
+    input.short_description === undefined
+      ? current.short_description
+      : (input.short_description?.trim() || null);
   const now = Date.now();
 
   db.prepare(
-    "UPDATE prompts SET name = ?, content = ?, color = ?, updated_at = ? WHERE id = ?"
-  ).run(name, content, color, now, id);
+    "UPDATE prompts SET name = ?, content = ?, color = ?, short_description = ?, updated_at = ? WHERE id = ?"
+  ).run(name, content, color, short_description, now, id);
 
-  return { id, name, content, color, created_at: current.created_at, updated_at: now };
+  return { id, name, content, color, short_description, created_at: current.created_at, updated_at: now };
 }
 
 export function deletePrompt(db: Database, id: string): boolean {

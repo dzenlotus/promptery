@@ -99,7 +99,7 @@ export function TaskPromptsEditor({
           color={it.color}
           size="sm"
           inherited
-          tooltip={inheritedTooltip}
+          tooltip={it.short_description ? `${it.short_description} (${inheritedTooltip})` : inheritedTooltip}
           data-testid={`${testId}-inherited-${it.id}`}
         />
       ))}
@@ -180,7 +180,7 @@ export function TaskPromptsEditor({
                       "data-[selected=true]:bg-[var(--hover-overlay)]"
                     )}
                   >
-                    <Chip name={it.name} color={it.color} size="sm" />
+                    <Chip name={it.name} color={it.color} size="sm" tooltip={it.short_description ?? undefined} />
                   </Command.Item>
                 ))}
               </div>
@@ -217,6 +217,7 @@ function SortableDirectChip({
       color={prompt.color}
       size="sm"
       onRemove={onRemove}
+      tooltip={prompt.short_description ?? undefined}
       style={style}
       data-testid={testId}
       {...attributes}

@@ -21,6 +21,7 @@ export interface PromptInGroup {
   name: string;
   content: string;
   color: string | null;
+  short_description: string | null;
   /** Position of this prompt within THIS group (not the prompt's own order). */
   position: number;
 }
@@ -99,7 +100,7 @@ export function getPromptGroup(db: Database, id: string): PromptGroupWithPrompts
 
   const prompts = db
     .prepare(
-      `SELECT p.id, p.name, p.content, p.color, pgm.position
+      `SELECT p.id, p.name, p.content, p.color, p.short_description, pgm.position
        FROM prompt_group_members pgm
        JOIN prompts p ON p.id = pgm.prompt_id
        WHERE pgm.group_id = ?
