@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { ChevronDown, ChevronRight, Folder, FolderPlus, Pencil, Trash2 } from "lucide-react";
 import { useLocation } from "wouter";
 import {
@@ -10,6 +9,7 @@ import {
 } from "../ui/DropdownMenu.js";
 import { IconButton } from "../ui/IconButton.js";
 import { usePromptGroups } from "../../hooks/usePromptGroups.js";
+import { useLocalStorage } from "../../hooks/useLocalStorage.js";
 import { cn } from "../../lib/cn.js";
 import type { PromptGroup } from "../../lib/types.js";
 
@@ -26,7 +26,7 @@ interface Props {
 
 export function PromptGroupsList({ onCreate, onEdit, onDelete }: Props) {
   const { data: groups = [], isLoading } = usePromptGroups();
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useLocalStorage("sidebar.groups.expanded", false);
   const [location, setLocation] = useLocation();
 
   if (isLoading && groups.length === 0) {
