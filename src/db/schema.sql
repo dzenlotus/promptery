@@ -183,3 +183,31 @@ CREATE TABLE IF NOT EXISTS prompt_group_members (
 CREATE INDEX IF NOT EXISTS idx_prompt_groups_position ON prompt_groups(position);
 CREATE INDEX IF NOT EXISTS idx_prompt_group_members_group ON prompt_group_members(group_id, position);
 CREATE INDEX IF NOT EXISTS idx_prompt_group_members_prompt ON prompt_group_members(prompt_id);
+
+-- Full-text search index for tasks. Triggers keep tasks_fts synced with the
+-- `tasks` table on insert/update/delete; on existing DBs migration 008 runs
+-- the same statements (idempotently) and backfills pre-existing rows.
+CREATE VIRTUAL TABLE IF NOT EXISTS tasks_fts USING fts5(
+  task_id UNINDEXED,
+  title,
+  description,
+  tokenize='unicode61 remove_diacritics 1'
+);
+
+CREATE TRIGGER IF NOT EXISTS tasks_fts_insert
+AFTER INSERT ON tasks BEGIN
+  INSERT INTO tasks_fts(task_id, title, description)
+  VALUES (new.id, new.title, new.description);
+END;
+
+CREATE TRIGGER IF NOT EXISTS tasks_fts_update
+AFTER UPDATE OF title, description ON tasks BEGIN
+  UPDATE tasks_fts
+  SET title = new.title, description = new.description
+  WHERE task_id = new.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS tasks_fts_delete
+AFTER DELETE ON tasks BEGIN
+  DELETE FROM tasks_fts WHERE task_id = old.id;
+END;

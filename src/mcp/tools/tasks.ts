@@ -34,14 +34,68 @@ export const list_tasks: ToolDefinition = {
 
 export const get_task: ToolDefinition = {
   name: "get_task",
-  description: "Fetch a task by id with its role and attached primitives.",
+  description:
+    "Fetch a task by id with its column and board context, but WITHOUT the full role/prompts/skills bundle. Cheaper than get_task_bundle when you only need the task metadata + location. Use get_task_bundle when you are about to work on the task and need its full prompt context.",
   inputSchema: {
     type: "object",
     properties: { id: { type: "string" } },
     required: ["id"],
     additionalProperties: false,
   },
-  handler: async (args, { hub }) => hub.get(`/api/tasks/${args.id as string}`),
+  handler: async (args, { hub }) =>
+    hub.get(`/api/tasks/${args.id as string}/with-location`),
+};
+
+function buildTaskSearchQuery(args: Record<string, unknown>): string {
+  const params = new URLSearchParams();
+  if (typeof args.query === "string" && args.query.length > 0) {
+    params.set("query", args.query);
+  }
+  if (typeof args.board_id === "string") params.set("board_id", args.board_id);
+  if (typeof args.column_id === "string") params.set("column_id", args.column_id);
+  if (typeof args.role_id === "string") params.set("role_id", args.role_id);
+  if (typeof args.limit === "number") params.set("limit", String(args.limit));
+  const qs = params.toString();
+  return qs.length > 0 ? `?${qs}` : "";
+}
+
+export const search_tasks: ToolDefinition = {
+  name: "search_tasks",
+  description:
+    "Search tasks across all boards by text query (matches title and description via SQLite FTS5). Returns matching tasks with their column and board context in a single call. Much more efficient than walking boards->columns->tasks. Use this when looking for a task by name, description content, or just to scan the workspace. Optional filters narrow by board, column, or role. Empty query falls back to listing recent tasks.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      query: { type: "string", description: "Text to match against title + description." },
+      board_id: { type: "string" },
+      column_id: { type: "string" },
+      role_id: { type: "string" },
+      limit: { type: "number", description: "Max results (default 20, max 500)." },
+    },
+    additionalProperties: false,
+  },
+  handler: async (args, { hub }) =>
+    hub.get(`/api/tasks/search${buildTaskSearchQuery(args)}`),
+};
+
+export const list_all_tasks: ToolDefinition = {
+  name: "list_all_tasks",
+  description:
+    "List every task across all boards with their column and board context, in one call. Optional filters by board_id, column_id, or role_id. Prefer this over list_boards + list_columns + list_tasks when you want a global view.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      board_id: { type: "string" },
+      column_id: { type: "string" },
+      role_id: { type: "string" },
+      limit: { type: "number", description: "Max results (default 20, max 500)." },
+    },
+    additionalProperties: false,
+  },
+  // Same endpoint as search_tasks; without `query` the server falls back to
+  // ORDER BY created_at DESC so this lists rather than searches.
+  handler: async (args, { hub }) =>
+    hub.get(`/api/tasks/search${buildTaskSearchQuery(args)}`),
 };
 
 export const get_task_bundle: ToolDefinition = {

@@ -21,6 +21,7 @@ export function runMigrations(db: Database): void {
   runMigration(db, "005_settings", apply005Settings);
   runMigration(db, "006_inheritance", apply006Inheritance);
   runMigration(db, "007_prompt_groups", apply007PromptGroups);
+  runMigration(db, "008_tasks_fts", apply008TasksFts);
   backfillDefaultColumnsForEmptyBoards(db);
 }
 
@@ -242,6 +243,26 @@ function apply007PromptGroups(db: Database): void {
   const sqlUrl = new URL("./migrations/007_prompt_groups.sql", import.meta.url);
   const sql = readFileSync(sqlUrl, "utf-8");
   db.exec(sql);
+}
+
+/**
+ * Apply 008: stand up the tasks_fts virtual table + sync triggers and backfill
+ * existing rows. Schema.sql also declares these on fresh installs (so first-run
+ * tests see the FTS table without needing migrations); this step is what
+ * upgrades pre-existing DBs and seeds the index from current `tasks` rows.
+ *
+ * Backfill is idempotent — only inserts rows missing from tasks_fts so a
+ * partial prior run plus this migration converge on the same state.
+ */
+function apply008TasksFts(db: Database): void {
+  const sqlUrl = new URL("./migrations/008_tasks_fts.sql", import.meta.url);
+  const sql = readFileSync(sqlUrl, "utf-8");
+  db.exec(sql);
+  db.exec(
+    `INSERT INTO tasks_fts(task_id, title, description)
+     SELECT id, title, description FROM tasks
+     WHERE id NOT IN (SELECT task_id FROM tasks_fts)`
+  );
 }
 
 /**

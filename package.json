@@ -1,6 +1,6 @@
 {
   "name": "@dzenlotus/promptery",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Kanban-based context management for AI agents via MCP",
   "keywords": [
     "mcp",

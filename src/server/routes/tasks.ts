@@ -10,6 +10,7 @@ import {
   addTaskPromptSchema,
   addTaskSkillSchema,
   addTaskMcpToolSchema,
+  searchTasksQuerySchema,
 } from "../validators/tasks.js";
 import { bus } from "../events/bus.js";
 import { buildContextBundle } from "../../lib/context.js";
@@ -41,6 +42,32 @@ boardTasksRoute.post("/:boardId/tasks", zValidator("json", createTaskSchema), (c
 });
 
 export const tasksRoute = new Hono();
+
+/**
+ * Cross-board task search/listing with location context. Empty query returns
+ * the most recent tasks (limited); a non-empty query is run through SQLite
+ * FTS5 ordered by rank. Filters compose with either path. Used by the MCP
+ * `search_tasks` and `list_all_tasks` tools to avoid the boards→columns→tasks
+ * walk that costs N tool calls per discovery.
+ */
+tasksRoute.get("/search", (c) => {
+  const parsed = searchTasksQuerySchema.safeParse(c.req.query());
+  if (!parsed.success) {
+    return c.json({ error: parsed.error.message }, 400);
+  }
+  const results = q.searchTasks(getDb(), parsed.data);
+  return c.json(results);
+});
+
+/**
+ * Lite get_task variant — task + column + board without the role/prompts
+ * bundle. Use the bundle endpoint when you need full execution context.
+ */
+tasksRoute.get("/:id/with-location", (c) => {
+  const result = q.getTaskWithLocation(getDb(), c.req.param("id"));
+  if (!result) return c.json({ error: "task not found" }, 404);
+  return c.json(result);
+});
 
 tasksRoute.get("/:id", (c) => {
   const task = q.getTask(getDb(), c.req.param("id"));

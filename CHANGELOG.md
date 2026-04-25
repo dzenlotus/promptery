@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.2.2 — 2026-04-25
+
+### Added
+
+- **`search_tasks` MCP tool** — full-text search across every task in the
+  workspace, returning each hit with its column and board context in one
+  call. Backed by a SQLite FTS5 virtual table (`tasks_fts`) kept in sync
+  with the `tasks` table via insert / update / delete triggers; the
+  `unicode61` tokenizer (with diacritics removal) handles Cyrillic and
+  other non-ASCII text. FTS5 special characters in the query (`"`, `-`,
+  `*`, `:`, `.`) are auto-escaped per token, so user input like
+  `cmd-k "exact phrase"` or `не работает` runs without breaking the FTS
+  grammar. Optional filters narrow by `board_id`, `column_id`, or
+  `role_id`. Empty result returns `[]` rather than erroring.
+- **`list_all_tasks` MCP tool** — cross-board task listing with the same
+  location envelope, ordered by `created_at DESC`. Replaces the
+  `list_boards → list_columns → list_tasks` walk that previously cost
+  one tool call per column. Supports the same `board_id` / `column_id` /
+  `role_id` filters and a `limit` (default 20, max 500).
+- **`GET /api/tasks/search`** HTTP endpoint backing both tools, with Zod
+  query-param validation and standard error envelope.
+- **`GET /api/tasks/:id/with-location`** — lite get-task endpoint that
+  returns the task plus its column and board, without the heavy
+  `role / prompts / skills / mcp_tools` bundle.
+- **Migration 008 (`tasks_fts`)** — declares the FTS virtual table and
+  triggers, then backfills existing rows so upgrades from 0.2.1 land
+  with a fully-populated index. Idempotent (`INSERT … WHERE id NOT IN`),
+  re-runs are no-ops.
+
+### Changed
+
+- **`get_task` MCP tool** is now the lite variant — it returns the task
+  with its column and board context but no longer hydrates the role /
+  prompts / skills / mcp_tools relations. Use `get_task_bundle` (XML for
+  agent prompts) or `get_task_context` (structured JSON) when you need
+  the full execution bundle. This makes task inspection cheap by
+  default; the heavy path stays available under explicit names.
+
 ## 0.2.1 — 2026-04-24
 
 ### Fixed

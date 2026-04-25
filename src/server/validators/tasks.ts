@@ -1,5 +1,13 @@
 import { z } from "zod";
 
+export const searchTasksQuerySchema = z.object({
+  query: z.string().optional(),
+  board_id: z.string().min(1).optional(),
+  column_id: z.string().min(1).optional(),
+  role_id: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(500).optional(),
+});
+
 export const createTaskSchema = z.object({
   column_id: z.string().min(1),
   title: z.string().min(1).max(200),

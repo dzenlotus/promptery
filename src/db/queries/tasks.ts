@@ -1,6 +1,8 @@
 import type { Database } from "better-sqlite3";
 import { nanoid } from "nanoid";
 import type { Role } from "./roles.js";
+import type { Board } from "./boards.js";
+import type { Column } from "./columns.js";
 import { listTaskPrompts, type TaskPrompt } from "./taskPrompts.js";
 import { listTaskSkills, type TaskSkill } from "./taskSkills.js";
 import { listTaskMcpTools, type TaskMcpTool } from "./taskMcpTools.js";
@@ -159,6 +161,150 @@ export function moveTask(
 export function deleteTask(db: Database, id: string): boolean {
   const result = db.prepare("DELETE FROM tasks WHERE id = ?").run(id);
   return result.changes > 0;
+}
+
+export interface TaskWithLocation {
+  task: Task;
+  column: Pick<Column, "id" | "name" | "position">;
+  board: Pick<Board, "id" | "name">;
+}
+
+export interface SearchTasksOptions {
+  query?: string;
+  board_id?: string;
+  column_id?: string;
+  role_id?: string;
+  limit?: number;
+}
+
+interface JoinedRow extends Task {
+  col_id: string;
+  col_name: string;
+  col_position: number;
+  brd_id: string;
+  brd_name: string;
+}
+
+const TASK_FIELDS = [
+  "id",
+  "board_id",
+  "column_id",
+  "number",
+  "title",
+  "description",
+  "position",
+  "role_id",
+  "created_at",
+  "updated_at",
+] as const;
+
+function rowToTaskWithLocation(row: JoinedRow): TaskWithLocation {
+  const bag: Record<string, unknown> = {};
+  for (const f of TASK_FIELDS) {
+    bag[f] = row[f as keyof JoinedRow];
+  }
+  return {
+    task: bag as unknown as Task,
+    column: { id: row.col_id, name: row.col_name, position: row.col_position },
+    board: { id: row.brd_id, name: row.brd_name },
+  };
+}
+
+/**
+ * FTS5 treats `"`, `*`, `:`, `-`, `.`, etc. as syntax. Wrapping each token in
+ * double quotes (with embedded `"` doubled) sidesteps the grammar entirely
+ * and matches the user's text as literal phrases — friendly for casual
+ * searches like "auth bug" or names with dashes.
+ */
+function escapeFtsQuery(q: string): string {
+  return q
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((token) => `"${token.replace(/"/g, '""')}"`)
+    .join(" ");
+}
+
+/**
+ * Cross-board task search with location context. With a non-empty `query`,
+ * routes through tasks_fts and orders by FTS rank; without, falls back to
+ * a plain join ordered by created_at DESC. Filters (`board_id`, `column_id`,
+ * `role_id`) compose with either path.
+ */
+export function searchTasks(db: Database, opts: SearchTasksOptions): TaskWithLocation[] {
+  const limit = opts.limit ?? 20;
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+  const hasQuery = !!(opts.query && opts.query.trim().length > 0);
+
+  let sql: string;
+  if (hasQuery) {
+    sql = `
+      SELECT t.id, t.board_id, t.column_id, t.number, t.title, t.description,
+             t.position, t.role_id, t.created_at, t.updated_at,
+             c.id AS col_id, c.name AS col_name, c.position AS col_position,
+             b.id AS brd_id, b.name AS brd_name
+      FROM tasks_fts fts
+      JOIN tasks t ON t.id = fts.task_id
+      JOIN columns c ON c.id = t.column_id
+      JOIN boards b ON b.id = c.board_id
+      WHERE tasks_fts MATCH ?
+    `;
+    params.push(escapeFtsQuery(opts.query!));
+  } else {
+    sql = `
+      SELECT t.id, t.board_id, t.column_id, t.number, t.title, t.description,
+             t.position, t.role_id, t.created_at, t.updated_at,
+             c.id AS col_id, c.name AS col_name, c.position AS col_position,
+             b.id AS brd_id, b.name AS brd_name
+      FROM tasks t
+      JOIN columns c ON c.id = t.column_id
+      JOIN boards b ON b.id = c.board_id
+      WHERE 1=1
+    `;
+  }
+
+  if (opts.board_id) {
+    conditions.push("b.id = ?");
+    params.push(opts.board_id);
+  }
+  if (opts.column_id) {
+    conditions.push("c.id = ?");
+    params.push(opts.column_id);
+  }
+  if (opts.role_id) {
+    conditions.push("t.role_id = ?");
+    params.push(opts.role_id);
+  }
+
+  if (conditions.length > 0) {
+    sql += " AND " + conditions.join(" AND ");
+  }
+
+  sql += hasQuery ? " ORDER BY rank LIMIT ?" : " ORDER BY t.created_at DESC LIMIT ?";
+  params.push(limit);
+
+  const rows = db.prepare(sql).all(...(params as [unknown, ...unknown[]])) as JoinedRow[];
+  return rows.map(rowToTaskWithLocation);
+}
+
+/**
+ * Lite get_task variant: task + column + board without the role/prompts/skills
+ * bundle. For the heavy version use getTask + buildContextBundle.
+ */
+export function getTaskWithLocation(db: Database, id: string): TaskWithLocation | null {
+  const row = db
+    .prepare(
+      `SELECT t.id, t.board_id, t.column_id, t.number, t.title, t.description,
+              t.position, t.role_id, t.created_at, t.updated_at,
+              c.id AS col_id, c.name AS col_name, c.position AS col_position,
+              b.id AS brd_id, b.name AS brd_name
+       FROM tasks t
+       JOIN columns c ON c.id = t.column_id
+       JOIN boards b ON b.id = c.board_id
+       WHERE t.id = ?`
+    )
+    .get(id) as JoinedRow | undefined;
+  return row ? rowToTaskWithLocation(row) : null;
 }
 
 /**
