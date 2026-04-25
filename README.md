@@ -4,13 +4,21 @@
 
 Build a library of reusable agent personas (roles + prompts) and apply them to tasks on a kanban board. Agents connect via the Model Context Protocol (MCP) and receive structured context for every task they work on.
 
-## What's new in 0.2.0
+## What's new in 0.3.0
 
-- **Inheritance** — roles and prompts now work at board, column, and task levels with a clear priority ladder. A task's effective context unions six origins (direct / role / column / column-role / board / board-role) and deduplicates by specificity.
-- **Prompt groups** — organise your prompt library into folders. Many-to-many: one prompt can live in multiple groups.
-- **Settings** — data export/import, automatic daily backups, themes (light / dark / system), animated backgrounds.
-- **Better CLI** — `start`, `stop`, `backup`, `restore` commands with a proper status view and startup banner.
-- **Fixed** — installer now works on nvm/fnm/volta/asdf systems (prior versions couldn't connect from GUI apps that don't inherit shell PATH).
+- **Spaces** — workspace organisation layer above boards. Each space carries a slug `prefix` (e.g. `pmt`) used to mint task slugs (`pmt-46`). Boards live inside spaces; one default space is system-managed and pinned at the bottom of the sidebar as plain "Boards".
+- **Task slugs replace per-board numbers** — `task.number` is gone; every task carries a globally unique `slug` like `pmt-46` derived from its space's prefix. Slugs may change when a board moves between spaces (re-slugged automatically); the internal `id` is the stable identifier — agents are encouraged to persist ids, not slugs.
+- **Drag-and-drop sidebar** — reorder spaces, reorder boards within a space, drag boards between spaces. Cross-space drops re-slug every task on the moved board to the destination prefix.
+- **`/t/<id>` and `/b/<id>` URLs** — short URL scheme matching `/s/<id>` for spaces. The `/t/` route accepts either a slug or an internal id and resolves to the task's board.
+- **Slug exact match in search** — `search_tasks("pmt-46")` returns the slug-carrying task as the top result with `match_type: "exact"`, regardless of FTS rank. Other hits carry `match_type: "fts"`.
+- **Minimal MCP responses** — every MCP write tool now returns `{id, ...minimal_changed_fields}` (50–200 bytes); every read tool except `get_task_bundle` strips `description` / role content / full prompt content from the payload. Use `get_task_bundle` (XML for system prompt) or `get_prompt(id)` (full prompt content) when you actually need the heavy fields.
+- **Pre-migration safety net** — destructive migrations (`009_spaces`, `010_board_position`) now snapshot the DB to `~/.promptery/backups/db-pre-<name>-<ts>.sqlite` before applying, alongside the existing daily auto-backup.
+
+**Breaking changes from 0.2.x:**
+- `tasks.number` is removed from the schema, the API, and MCP responses. Use `tasks.slug`.
+- MCP read/write response shapes are minimal by default. Tools that previously returned full entities now return navigation data only — code that reaches into `description` / `role.prompts` etc. on MCP responses needs to call `get_task_bundle` or `get_prompt` instead.
+- HTTP API responses are unchanged (UI depends on full shapes).
+- Existing DBs migrate automatically: tasks get `pmt-N` slugs if their boards' names start with "Promptery", `task-N` otherwise.
 
 See [CHANGELOG.md](./CHANGELOG.md) for the full list.
 
@@ -89,13 +97,14 @@ You can open Claude Desktop, Cursor, and Codex simultaneously — all three agen
 
 ## Concepts
 
+- **Spaces** — workspace organisation layer. Boards live inside spaces; each space has a `prefix` (1–10 lowercase letters/digits/hyphens) that becomes the slug prefix for tasks created on its boards. One default space is system-managed (prefix `task`) and shows up at the bottom of the sidebar as plain "Boards".
 - **Prompts** — reusable instruction snippets like "always write comments in English" or "avoid `any` in TypeScript"
 - **Prompt groups** — folders that organise related prompts. A prompt can belong to multiple groups simultaneously; it's never duplicated by group membership
 - **Roles** — composable agent personas. A role has its own markdown description and a set of default prompts (e.g. "React Performance Specialist" with prompts for memoization and bundle analysis)
-- **Boards** — project-level containers. A board can define a default role and default prompts that every task on it inherits
+- **Boards** — project-level containers. A board can define a default role and default prompts that every task on it inherits. Boards belong to exactly one space.
 - **Columns** — workflow stages within a board. A column can override the board's role and add its own prompts — e.g. a "Review" column that switches every task to a "Code Reviewer" role automatically
-- **Tasks** — work items. Inherit role and prompts from column and board unless overridden directly
-- **Context bundle** — when an agent calls `get_task_bundle(id)`, Promptery resolves the full context (inherited role + the deduplicated prompt union from all six origins) and returns it as XML ready to paste into agent instructions
+- **Tasks** — work items. Each task has a stable internal `id` and a human-friendly `slug` (`pmt-46`) derived from its board's space prefix. Slugs are mutable across `move_board_to_space`; ids are not.
+- **Context bundle** — when an agent calls `get_task_bundle(id_or_slug)`, Promptery resolves the full context (inherited role + the deduplicated prompt union from all six origins) and returns it as XML ready to paste into agent instructions. Accepts both slugs and internal ids.
 
 ## Inheritance model
 
@@ -114,13 +123,27 @@ When the same prompt arrives from multiple layers, only the most specific origin
 
 ## MCP tools exposed to agents
 
-**Boards**: list, get, create, update, delete, **set_role**, **set_prompts**, **get_prompts**
+**Spaces** *(new in 0.3.0)*: list, get, create, update, delete, **move_board_to_space**
+**Boards**: list, get, create *(takes optional `space_id`)*, update, delete, **set_role**, **set_prompts**, **get_prompts**
 **Columns**: list, create, update, delete, **set_role**, **set_prompts**, **get_prompts**
-**Tasks**: list, get, **get_task_bundle**, **get_task_context**, create, update, move, delete, set_role, add_prompt, remove_prompt
+**Tasks**: list, get, **get_task_bundle** *(accepts slug or id)*, **get_task_context**, create *(returns slug)*, update, move, delete, set_role, add_prompt, remove_prompt
 **Roles**: list, get, create, update, delete, set_prompts
 **Prompts**: list, get, create, update, delete
 **Prompt groups**: list, get, create, update, delete, **set_group_prompts**, **add_prompt_to_group**, **remove_prompt_from_group**, **reorder_prompt_groups**
 **UI**: get_ui_info, open_promptery_ui
+
+### Response shapes (0.3.0)
+
+All MCP write tools return a minimal confirmation envelope (`{id, ...changed}`, 50–200 bytes). All MCP read tools except `get_task_bundle` and `get_prompt` return navigation data only — no description, no full role/prompt content. The two heavy entry points by design:
+
+- `get_task_bundle(id_or_slug)` — full agent context as XML, ready to paste into a system prompt.
+- `get_prompt(id)` — single prompt's full content body.
+
+The HTTP API at `/api/...` is unchanged from 0.2.x — UI clients still get full entities for optimistic updates. Only the MCP bridge layer projects to minimal shapes.
+
+### Slug vs id
+
+Tasks carry a `slug` (e.g. `pmt-46`) for human-readable conversation and an `id` (CUID) for stable references. Use `slug` when chatting about a task; use `id` for any reference you'll persist (storing a task pointer in another task's description, linking from a chat log, etc.). Slugs change when a board is moved between spaces; ids never do.
 
 ## Managing your data
 
@@ -129,6 +152,8 @@ All data lives locally in `~/.promptery/db.sqlite`. No cloud, no telemetry.
 ### Automatic backups
 
 On every hub startup, Promptery checks whether today's automatic backup exists. If not, it creates one via SQLite `VACUUM INTO` (safe even on a database that's in use). Auto-backups older than 30 days are pruned on the next start.
+
+Destructive schema migrations (currently `009_spaces` and `010_board_position`) take a separate snapshot to `~/.promptery/backups/db-pre-<name>-<ts>.sqlite` immediately before they apply, so an upgrade can always be rolled back via `promptery restore`.
 
 ### Manual backups via CLI
 

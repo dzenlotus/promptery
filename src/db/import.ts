@@ -356,14 +356,30 @@ function importBoards(
 
   const existingBoardIds = idSet(db, "boards");
 
+  // Imported boards always land in the destination's default space — slugs
+  // are minted from there too. Preserving the source `space_id` would risk
+  // referencing a space that doesn't exist in this DB, and preserving slugs
+  // could collide with locally-created tasks under the same prefix.
+  const defaultSpace = db
+    .prepare("SELECT id, prefix FROM spaces WHERE is_default = 1")
+    .get() as { id: string; prefix: string };
+  const slugCounterRow = db
+    .prepare("SELECT next_number FROM space_counters WHERE space_id = ?")
+    .get(defaultSpace.id) as { next_number: number };
+  const slugCtx: SlugContext = {
+    space_id: defaultSpace.id,
+    prefix: defaultSpace.prefix,
+    next: slugCounterRow.next_number,
+  };
+
   const insertBoard = db.prepare(
-    "INSERT INTO boards (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)"
+    "INSERT INTO boards (id, name, space_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
   );
   const insertColumn = db.prepare(
     "INSERT INTO columns (id, board_id, name, position, created_at) VALUES (?, ?, ?, ?, ?)"
   );
   const insertTask = db.prepare(
-    `INSERT INTO tasks (id, board_id, column_id, number, title, description, position, role_id, created_at, updated_at)
+    `INSERT INTO tasks (id, board_id, column_id, slug, title, description, position, role_id, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
 
@@ -376,7 +392,13 @@ function importBoards(
 
       // Rename path: fresh board id, columns and tasks all get fresh ids too.
       const newBoardId = nanoid();
-      insertBoard.run(newBoardId, `${b.name} (imported)`, b.created_at ?? Date.now(), Date.now());
+      insertBoard.run(
+        newBoardId,
+        `${b.name} (imported)`,
+        defaultSpace.id,
+        b.created_at ?? Date.now(),
+        Date.now()
+      );
       existingBoardIds.add(newBoardId);
       result.counts.boards.renamed++;
 
@@ -397,13 +419,20 @@ function importBoards(
         mcpToolIdMap,
         insertTask,
         result,
-        true
+        true,
+        slugCtx
       );
       continue;
     }
 
     // Fresh board — original ids preserved for columns/tasks/task links.
-    insertBoard.run(b.id, b.name, b.created_at ?? Date.now(), Date.now());
+    insertBoard.run(
+      b.id,
+      b.name,
+      defaultSpace.id,
+      b.created_at ?? Date.now(),
+      Date.now()
+    );
     existingBoardIds.add(b.id);
     result.counts.boards.added++;
 
@@ -424,9 +453,23 @@ function importBoards(
       mcpToolIdMap,
       insertTask,
       result,
-      false
+      false,
+      slugCtx
     );
   }
+
+  // Persist the advanced counter so the next locally-created task picks up
+  // where the import left off.
+  db.prepare(
+    "UPDATE space_counters SET next_number = ? WHERE space_id = ?"
+  ).run(slugCtx.next, slugCtx.space_id);
+}
+
+interface SlugContext {
+  space_id: string;
+  prefix: string;
+  /** Mutated as each task consumes its slug — caller persists once at the end. */
+  next: number;
 }
 
 function insertBoardColumns(
@@ -462,7 +505,8 @@ function insertBoardTasks(
   mcpToolIdMap: Map<string, string>,
   insertTask: PreparedStatement,
   result: ImportResult,
-  isRename: boolean
+  isRename: boolean,
+  slugCtx: SlugContext
 ): void {
   const insertTaskPrompt = db.prepare(
     "INSERT OR IGNORE INTO task_prompts (task_id, prompt_id, origin, position) VALUES (?, ?, ?, ?)"
@@ -474,22 +518,19 @@ function insertBoardTasks(
     "INSERT OR IGNORE INTO task_mcp_tools (task_id, mcp_tool_id, origin, position) VALUES (?, ?, ?, ?)"
   );
 
-  // For renamed boards we recount `number` from scratch so per-board numbering
-  // stays dense; fresh boards can preserve imported values.
-  let nextNumber = 1;
-
   const boardTasks = tasks.filter((t) => t.board_id === origBoardId);
   for (const t of boardTasks) {
     const newColId = columnIdMap.get(t.column_id);
     if (!newColId) continue;
     const newTaskId = isRename ? nanoid() : t.id;
     const mappedRoleId = t.role_id ? roleIdMap.get(t.role_id) ?? null : null;
-    const number = isRename ? nextNumber++ : t.number;
+    const slug = `${slugCtx.prefix}-${slugCtx.next}`;
+    slugCtx.next += 1;
     insertTask.run(
       newTaskId,
       newBoardId,
       newColId,
-      number,
+      slug,
       t.title,
       t.description ?? "",
       t.position ?? 0,

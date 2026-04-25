@@ -7,6 +7,8 @@ import { ThemedToaster } from "./providers/ThemedToaster.js";
 import { DevModeIndicator } from "./components/DevModeIndicator.js";
 import { ErrorBoundary } from "./components/ErrorBoundary.js";
 import { KanbanView } from "./views/KanbanView.js";
+import { SpaceSettingsView } from "./views/SpaceSettingsView.js";
+import { TaskRedirect } from "./views/TaskRedirect.js";
 import { HomeRedirect } from "./views/HomeRedirect.js";
 import { NotFoundView } from "./views/NotFoundView.js";
 import { PromptsView } from "./views/PromptsView.js";
@@ -26,6 +28,11 @@ function Routed() {
     <Switch>
       <Route path="/" component={HomeRedirect} />
       <Route path="/board/:id" component={KanbanView} />
+      {/* Short alias matching `/s/:id` and `/t/:id` per the v0.3.0 URL
+          scheme. Keeps `/board/:id` working for saved bookmarks. */}
+      <Route path="/b/:id" component={KanbanView} />
+      <Route path="/s/:id" component={SpaceSettingsView} />
+      <Route path="/t/:idOrSlug" component={TaskRedirect} />
       <Route path="/roles" component={RolesView} />
       {/* Group detail pattern is more specific — wouter Switch picks it
           first for two-segment URLs. Optional `:id?` below covers both

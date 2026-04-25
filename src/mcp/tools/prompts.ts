@@ -1,22 +1,35 @@
 import type { ToolDefinition } from "./index.js";
+import {
+  confirmation,
+  deleted,
+  projectPromptDetail,
+  projectPromptList,
+} from "../projections.js";
 
 export const list_prompts: ToolDefinition = {
   name: "list_prompts",
-  description: "List all prompts available to attach to roles or tasks.",
+  description:
+    "List all prompts (id, name, color). Use get_prompt(id) to fetch the full content " +
+    "of a specific prompt.",
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
-  handler: async (_args, { hub }) => hub.get("/api/prompts"),
+  handler: async (_args, { hub }) =>
+    projectPromptList(await hub.get("/api/prompts")),
 };
 
 export const get_prompt: ToolDefinition = {
   name: "get_prompt",
-  description: "Get a prompt by id, including its body.",
+  description:
+    "Get a prompt by id, including its full body content. This is the canonical way " +
+    "to retrieve a prompt's content — list_prompts intentionally omits content to keep " +
+    "the listing cheap.",
   inputSchema: {
     type: "object",
     properties: { id: { type: "string" } },
     required: ["id"],
     additionalProperties: false,
   },
-  handler: async (args, { hub }) => hub.get(`/api/prompts/${args.id as string}`),
+  handler: async (args, { hub }) =>
+    projectPromptDetail(await hub.get(`/api/prompts/${args.id as string}`)),
 };
 
 export const create_prompt: ToolDefinition = {
@@ -36,7 +49,11 @@ export const create_prompt: ToolDefinition = {
     const body: Record<string, unknown> = { name: args.name as string };
     if (typeof args.content === "string") body.content = args.content;
     if (typeof args.color === "string") body.color = args.color;
-    return hub.post("/api/prompts", body);
+    const created = (await hub.post("/api/prompts", body)) as {
+      id: string;
+      name: string;
+    };
+    return confirmation(created.id, { name: created.name });
   },
 };
 
@@ -59,7 +76,11 @@ export const update_prompt: ToolDefinition = {
     if (typeof args.name === "string") body.name = args.name;
     if (typeof args.content === "string") body.content = args.content;
     if (typeof args.color === "string") body.color = args.color;
-    return hub.patch(`/api/prompts/${args.id as string}`, body);
+    const updated = (await hub.patch(
+      `/api/prompts/${args.id as string}`,
+      body
+    )) as { id: string };
+    return confirmation(updated.id);
   },
 };
 
@@ -73,6 +94,9 @@ export const delete_prompt: ToolDefinition = {
     required: ["id"],
     additionalProperties: false,
   },
-  handler: async (args, { hub }) =>
-    hub.delete(`/api/prompts/${args.id as string}`),
+  handler: async (args, { hub }) => {
+    const id = args.id as string;
+    await hub.delete(`/api/prompts/${id}`);
+    return deleted(id);
+  },
 };

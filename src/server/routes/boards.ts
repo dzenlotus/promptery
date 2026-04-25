@@ -4,6 +4,8 @@ import { getDb } from "../../db/index.js";
 import * as q from "../../db/queries/index.js";
 import {
   createBoardSchema,
+  moveBoardToSpaceSchema,
+  reorderBoardsSchema,
   setBoardPromptsSchema,
   setBoardRoleSchema,
   updateBoardSchema,
@@ -17,11 +19,59 @@ app.get("/", (c) => {
 });
 
 app.post("/", zValidator("json", createBoardSchema), (c) => {
-  const { name } = c.req.valid("json");
-  const board = q.createBoard(getDb(), name);
+  const { name, space_id } = c.req.valid("json");
+  if (space_id && !q.getSpace(getDb(), space_id)) {
+    return c.json({ error: "space not found" }, 404);
+  }
+  const board = q.createBoard(getDb(), name, { space_id });
   bus.publish({ type: "board.created", data: { boardId: board.id, board } });
   return c.json(board, 201);
 });
+
+/**
+ * Bulk reorder boards within a single space. The body carries `space_id`
+ * (the affected space) and `ids` (the desired order); the repo renumbers
+ * positions 1..N. Boards from other spaces in `ids` are silently ignored
+ * at the repo layer.
+ *
+ * Registered BEFORE the `:id` routes so "reorder" isn't matched as a board id.
+ */
+app.post("/reorder", zValidator("json", reorderBoardsSchema), (c) => {
+  const { space_id, ids } = c.req.valid("json");
+  if (!q.getSpace(getDb(), space_id)) {
+    return c.json({ error: "space not found" }, 404);
+  }
+  const updated = q.reorderBoards(getDb(), space_id, ids);
+  bus.publish({ type: "boards.reordered", data: { spaceId: space_id, ids } });
+  return c.json(updated);
+});
+
+/**
+ * Move a board to a different space. Re-slugs every task on the board to
+ * the destination space's prefix; the destination counter advances by the
+ * number of tasks moved. Internal task ids are preserved — anything held
+ * by id keeps resolving across the move. See spaces.ts:moveBoardToSpace
+ * for the semantics.
+ */
+app.post(
+  "/:id/move-to-space",
+  zValidator("json", moveBoardToSpaceSchema),
+  (c) => {
+    const id = c.req.param("id");
+    const { space_id, position } = c.req.valid("json");
+    // Errors (NotFoundError) bubble to errorHandler → 404.
+    const result = q.moveBoardToSpace(getDb(), id, space_id, { position });
+    bus.publish({
+      type: "board.moved_to_space",
+      data: {
+        boardId: id,
+        spaceId: space_id,
+        reslugged_count: result.reslugged_count,
+      },
+    });
+    return c.json(result);
+  }
+);
 
 // Detail fetch returns the enriched shape with role + direct prompts so UI
 // can render the board header without a second request.

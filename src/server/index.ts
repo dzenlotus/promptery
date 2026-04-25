@@ -3,6 +3,7 @@ import { serve, type ServerType } from "@hono/node-server";
 import { createNodeWebSocket } from "@hono/node-ws";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
+import spacesRoute from "./routes/spaces.js";
 import boardsRoute from "./routes/boards.js";
 import { boardColumnsRoute, columnsRoute } from "./routes/columns.js";
 import { boardTasksRoute, tasksRoute } from "./routes/tasks.js";
@@ -28,6 +29,7 @@ export function createApp() {
   app.use("*", logger());
   app.use("/api/*", cors({ origin: "*" }));
 
+  app.route("/api/spaces", spacesRoute);
   app.route("/api/boards", boardsRoute);
   app.route("/api/boards", boardColumnsRoute);
   app.route("/api/boards", boardTasksRoute);

@@ -64,81 +64,117 @@ describe("tools registry", () => {
 });
 
 describe("boards + columns via hub", () => {
-  it("create_board returns a board, get_board returns it with columns", async () => {
-    const board = await call<{ id: string; name: string }>("create_board", {
-      name: "tools-hub-test",
-    });
+  it("create_board returns minimal shape; get_board exposes column_ids; list_columns has the names", async () => {
+    const board = await call<{ id: string; name: string; space_id: string }>(
+      "create_board",
+      { name: "tools-hub-test" }
+    );
     expect(board.id).toBeTruthy();
     expect(board.name).toBe("tools-hub-test");
+    expect(board.space_id).toBeTruthy();
 
-    const full = await call<{ id: string; columns: { id: string; name: string }[] }>(
-      "get_board",
-      { id: board.id }
+    const detail = await call<{ id: string; column_ids: string[] }>("get_board", {
+      id: board.id,
+    });
+    expect(detail.id).toBe(board.id);
+    expect(detail.column_ids).toHaveLength(4);
+
+    const cols = await call<Array<{ id: string; name: string; position: number }>>(
+      "list_columns",
+      { board_id: board.id }
     );
-    expect(full.columns.map((c) => c.name)).toEqual(["todo", "in-progress", "qa", "done"]);
+    expect(cols.map((c) => c.name)).toEqual([
+      "todo",
+      "in-progress",
+      "qa",
+      "done",
+    ]);
   });
 
   it("update_board renames it, delete_board removes it", async () => {
     const board = await call<{ id: string }>("create_board", { name: "to-rename" });
-    const renamed = await call<{ name: string }>("update_board", {
+    const renamed = await call<{ id: string; name: string }>("update_board", {
       id: board.id,
       name: "renamed",
     });
     expect(renamed.name).toBe("renamed");
-    await call("delete_board", { id: board.id });
+    const removed = await call<{ deleted: boolean }>("delete_board", {
+      id: board.id,
+    });
+    expect(removed.deleted).toBe(true);
   });
 });
 
 describe("tasks + role inheritance via hub", () => {
-  it("create_task with role_id auto-inherits role prompts", async () => {
-    const board = await call<{ id: string }>("create_board", { name: "task-role-flow" });
-    const full = await call<{ columns: { id: string }[] }>("get_board", { id: board.id });
+  // The MCP `create_task` response is intentionally minimal (id, slug,
+  // column/board ids, position) so agents don't burn context on the
+  // pre-attached role + prompts. Verify the inheritance side-effects via
+  // the bundle endpoint, which IS the heavy entrypoint by design.
+  it("create_task with role_id auto-inherits role prompts (verified via bundle)", async () => {
+    const board = await call<{ id: string }>("create_board", {
+      name: "task-role-flow",
+    });
+    const cols = await call<Array<{ id: string }>>("list_columns", {
+      board_id: board.id,
+    });
 
     const prompt = await call<{ id: string }>("create_prompt", {
       name: "p-hub-1",
-      content: "helper",
+      content: "role-helper-content",
     });
     const role = await call<{ id: string }>("create_role", { name: "r-hub-1" });
     await call("set_role_prompts", { role_id: role.id, prompt_ids: [prompt.id] });
 
-    const task = await call<{
-      id: string;
-      role_id: string | null;
-      prompts: { id: string; origin: string }[];
-    }>("create_task", {
-      board_id: board.id,
-      column_id: full.columns[0]!.id,
-      title: "my task",
-      role_id: role.id,
-    });
+    const task = await call<{ id: string; slug: string; column_id: string }>(
+      "create_task",
+      {
+        board_id: board.id,
+        column_id: cols[0]!.id,
+        title: "my task",
+        role_id: role.id,
+      }
+    );
+    expect(task.id).toBeTruthy();
+    expect(task.slug).toMatch(/^[a-z0-9-]{1,10}-\d+$/);
+    expect(task.column_id).toBe(cols[0]!.id);
 
-    expect(task.role_id).toBe(role.id);
-    expect(
-      task.prompts.some((p) => p.id === prompt.id && p.origin === `role:${role.id}`)
-    ).toBe(true);
+    // Inheritance side-effect surfaces in the XML bundle.
+    const bundle = await call<string>("get_task_bundle", { id: task.id });
+    expect(bundle).toContain("role-helper-content");
   });
 
-  it("create_task with prompt_ids attaches direct prompts", async () => {
-    const board = await call<{ id: string }>("create_board", { name: "direct-prompts" });
-    const full = await call<{ columns: { id: string }[] }>("get_board", { id: board.id });
-    const prompt = await call<{ id: string }>("create_prompt", { name: "p-hub-2" });
-
-    const task = await call<{ prompts: { id: string; origin: string }[] }>("create_task", {
+  it("create_task with prompt_ids attaches direct prompts (verified via bundle)", async () => {
+    const board = await call<{ id: string }>("create_board", {
+      name: "direct-prompts",
+    });
+    const cols = await call<Array<{ id: string }>>("list_columns", {
       board_id: board.id,
-      column_id: full.columns[0]!.id,
+    });
+    const prompt = await call<{ id: string }>("create_prompt", {
+      name: "p-hub-2",
+      content: "direct-helper-content",
+    });
+
+    const task = await call<{ id: string; slug: string }>("create_task", {
+      board_id: board.id,
+      column_id: cols[0]!.id,
       title: "with direct",
       prompt_ids: [prompt.id],
     });
-    expect(task.prompts).toEqual([
-      expect.objectContaining({ id: prompt.id, origin: "direct" }),
-    ]);
+    expect(task.id).toBeTruthy();
+
+    const bundle = await call<string>("get_task_bundle", { id: task.id });
+    expect(bundle).toContain("direct-helper-content");
+    expect(bundle).toContain("<direct_prompts>");
   });
 });
 
 describe("get_task_bundle returns XML string", () => {
   it("builds a valid context XML for a task with role + direct prompt", async () => {
     const board = await call<{ id: string }>("create_board", { name: "bundle-board" });
-    const full = await call<{ columns: { id: string }[] }>("get_board", { id: board.id });
+    const cols = await call<Array<{ id: string }>>("list_columns", {
+      board_id: board.id,
+    });
     const rolePrompt = await call<{ id: string }>("create_prompt", {
       name: "role-p",
       content: "role guidance",
@@ -153,9 +189,9 @@ describe("get_task_bundle returns XML string", () => {
     });
     await call("set_role_prompts", { role_id: role.id, prompt_ids: [rolePrompt.id] });
 
-    const task = await call<{ id: string }>("create_task", {
+    const task = await call<{ id: string; slug: string }>("create_task", {
       board_id: board.id,
-      column_id: full.columns[0]!.id,
+      column_id: cols[0]!.id,
       title: "Shipping feature",
       description: "Build the thing",
       role_id: role.id,
@@ -195,11 +231,13 @@ describe("search_tasks / list_all_tasks / get_task across multiple boards", () =
   // though earlier blocks have already populated the shared in-memory DB.
   const MARK = "FTSLAB";
 
+  // Minimal-shape envelope: list_all_tasks / search_tasks now return tasks
+  // without `description` (description lives in the bundle endpoint).
   type Hit = {
     task: {
       id: string;
+      slug: string;
       title: string;
-      description: string;
       column_id: string;
       board_id: string;
       role_id: string | null;
@@ -230,11 +268,12 @@ describe("search_tasks / list_all_tasks / get_task across multiple boards", () =
       }>
     ) {
       const board = await call<{ id: string }>("create_board", { name });
-      const cols = (
-        await call<{ columns: { id: string; name: string }[] }>("get_board", {
-          id: board.id,
-        })
-      ).columns;
+      // list_columns returns the full column metadata (id + name + position);
+      // get_board now only carries column_ids, so use list_columns when the
+      // caller needs to index by column position.
+      const cols = await call<
+        Array<{ id: string; name: string; position: number }>
+      >("list_columns", { board_id: board.id });
       const created: Array<{ id: string; columnId: string }> = [];
       for (const t of tasks) {
         const out = await call<{ id: string }>("create_task", {
@@ -420,22 +459,24 @@ describe("search_tasks / list_all_tasks / get_task across multiple boards", () =
     }
   });
 
-  it("get_task: returns the lite task + column + board shape", async () => {
+  it("get_task: returns the minimal task + column + board envelope", async () => {
     const fx = await buildFixture();
 
     const target = fx.backend.tasks[2]!; // "review auth tokens"
-    const got = await call<Hit & Record<string, unknown>>("get_task", { id: target.id });
+    const got = await call<Hit & Record<string, unknown>>("get_task", {
+      id: target.id,
+    });
 
     expect(got.task.id).toBe(target.id);
     expect(got.task.title).toBe(`${fx.ns} review auth tokens`);
-    expect(got.task.description).toBe("rotate them");
     expect(got.column.id).toBe(target.columnId);
     expect(got.column.name).toBe("qa");
     expect(got.board.id).toBe(fx.backend.boardId);
     expect(got.board.name).toBe(`${fx.ns}-Backend`);
 
-    // Lite variant: must not pull the heavy bundle keys (those are reserved
-    // for get_task_bundle / get_task_context).
+    // Minimal shape: task body content stays out of the read tool — agents
+    // who need it call get_task_bundle / get_task_context.
+    expect((got.task as Record<string, unknown>).description).toBeUndefined();
     expect((got as Record<string, unknown>).prompts).toBeUndefined();
     expect((got as Record<string, unknown>).skills).toBeUndefined();
     expect((got as Record<string, unknown>).mcp_tools).toBeUndefined();

@@ -8,7 +8,7 @@ function makeTask(overrides: Partial<TaskWithRelations> = {}): TaskWithRelations
     id: "t1",
     board_id: "b1",
     column_id: "c1",
-    number: 42,
+    slug: "task-42",
     title: "Sample",
     description: "",
     position: 1,
@@ -27,7 +27,7 @@ describe("buildContextBundle", () => {
   it("emits only a <task> section when no role and no relations", () => {
     const xml = buildContextBundle(makeTask({ description: "do the thing" }));
     expect(xml).not.toContain("<role");
-    expect(xml).toContain('<task id="42" title="Sample">');
+    expect(xml).toContain('<task id="task-42" title="Sample">');
     expect(xml).toContain("do the thing");
   });
 
@@ -40,7 +40,7 @@ describe("buildContextBundle", () => {
     const xml = buildContextBundle(
       makeTask({
         title: "Optimize ProductGrid",
-        number: 1,
+        slug: "task-1",
         description: "speed it up",
         role_id: "role1",
         role: {
@@ -94,7 +94,7 @@ describe("buildContextBundle", () => {
     expect(xml).toContain('<skill name="memoization">');
     expect(xml).toContain("<mcp_tools>");
     expect(xml).toContain('<mcp_tool name="react-devtools">');
-    expect(xml).toContain('<task id="1" title="Optimize ProductGrid">');
+    expect(xml).toContain('<task id="task-1" title="Optimize ProductGrid">');
   });
 
   it("omits empty primitive groups in role section but keeps the role block", () => {
@@ -215,11 +215,11 @@ describe("buildContextBundle — bug #15 regression", () => {
     }
   });
 
-  it("always includes a <task> section with the title and number", () => {
+  it("always includes a <task> section with the title and slug", () => {
     const xml = buildContextBundle(
-      makeTask({ number: 15, title: "Inheritance bug", description: "fix me" })
+      makeTask({ slug: "task-15", title: "Inheritance bug", description: "fix me" })
     );
-    expect(xml).toContain('<task id="15" title="Inheritance bug">');
+    expect(xml).toContain('<task id="task-15" title="Inheritance bug">');
     expect(xml).toContain("fix me");
   });
 

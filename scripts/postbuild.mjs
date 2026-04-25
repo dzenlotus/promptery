@@ -11,6 +11,11 @@ const assets = [
   ["src/db/migrations/006_inheritance.sql", "dist/db/migrations/006_inheritance.sql"],
   ["src/db/migrations/007_prompt_groups.sql", "dist/db/migrations/007_prompt_groups.sql"],
   ["src/db/migrations/008_tasks_fts.sql", "dist/db/migrations/008_tasks_fts.sql"],
+  ["src/db/migrations/009_spaces.sql", "dist/db/migrations/009_spaces.sql"],
+  [
+    "src/db/migrations/010_board_position.sql",
+    "dist/db/migrations/010_board_position.sql",
+  ],
 ];
 
 for (const [src, dest] of assets) {

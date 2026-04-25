@@ -1,3 +1,4 @@
+import type { Space } from "../../db/queries/spaces.js";
 import type { Board } from "../../db/queries/boards.js";
 import type { Column } from "../../db/queries/columns.js";
 import type { Task, TaskWithRelations } from "../../db/queries/tasks.js";
@@ -8,6 +9,19 @@ import type { Role, RoleWithRelations } from "../../db/queries/roles.js";
 import type { PromptGroup } from "../../db/queries/promptGroups.js";
 
 export type ServerEvent =
+  | { type: "space.created"; data: { spaceId: string; space: Space } }
+  | { type: "space.updated"; data: { spaceId: string; space: Space } }
+  | { type: "space.deleted"; data: { spaceId: string } }
+  | { type: "spaces.reordered"; data: { ids: string[] } }
+  | { type: "boards.reordered"; data: { spaceId: string; ids: string[] } }
+  | {
+      type: "board.moved_to_space";
+      data: {
+        boardId: string;
+        spaceId: string;
+        reslugged_count: number;
+      };
+    }
   | { type: "board.created"; data: { boardId: string; board: Board } }
   | { type: "board.updated"; data: { boardId: string; board: Board } }
   | { type: "board.deleted"; data: { boardId: string } }

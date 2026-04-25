@@ -2,6 +2,11 @@
 export const ROUTES = {
   home: "/",
   board: (id: string) => `/board/${id}`,
+  space: (id: string) => `/s/${id}`,
+  /** External-friendly task URL — accepts slug or id, resolves on the
+   *  server, and redirects to the task's board. Mirrors `/b/` and `/s/`
+   *  in shape per the v0.3.0 spec. */
+  task: (idOrSlug: string) => `/t/${idOrSlug}`,
   roles: "/roles",
   prompts: "/prompts",
   skills: "/skills",
@@ -22,7 +27,14 @@ export const TAB_ORDER: TabId[] = [
 ];
 
 export function locationToTab(location: string): TabId {
-  if (location === "/" || location.startsWith("/board/")) return "kanban";
+  if (
+    location === "/" ||
+    location.startsWith("/board/") ||
+    location.startsWith("/b/") ||
+    location.startsWith("/s/") ||
+    location.startsWith("/t/")
+  )
+    return "kanban";
   if (location.startsWith("/roles")) return "roles";
   if (location.startsWith("/prompts")) return "prompts";
   if (location.startsWith("/skills")) return "skills";

@@ -11,7 +11,7 @@ import { ROUTES } from "../lib/routes.js";
 import { api } from "../lib/api.js";
 import { qk } from "../lib/query.js";
 import { KanbanBoard } from "../components/kanban/KanbanBoard.js";
-import { BoardsList } from "../components/boards/BoardsList.js";
+import { SpacesList } from "../components/spaces/SpacesList.js";
 import { BoardEditDialog } from "../components/boards/BoardEditDialog.js";
 import { BoardDeleteDialog } from "../components/boards/BoardDeleteDialog.js";
 import { AttachmentChipRow } from "../components/common/AttachmentChipRow.js";
@@ -173,5 +173,5 @@ export function KanbanView() {
     </div>
   );
 
-  return <PageLayout sidebarContent={<BoardsList />} mainContent={mainContent} />;
+  return <PageLayout sidebarContent={<SpacesList />} mainContent={mainContent} />;
 }

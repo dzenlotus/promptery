@@ -1,7 +1,32 @@
+export interface Space {
+  id: string;
+  name: string;
+  prefix: string;
+  description: string | null;
+  is_default: boolean;
+  position: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface SpaceWithBoards extends Space {
+  /** Ordered list of board ids contained in this space (created_at ASC). */
+  board_ids: string[];
+}
+
+export interface MoveBoardToSpaceResult {
+  board_id: string;
+  space_id: string;
+  reslugged_count: number;
+}
+
 export interface Board {
   id: string;
   name: string;
+  space_id: string;
   role_id: string | null;
+  /** Per-space ordinal that drives the sidebar order. */
+  position: number;
   created_at: number;
   updated_at: number;
 }
@@ -61,7 +86,12 @@ export interface Task {
   id: string;
   board_id: string;
   column_id: string;
-  number: number;
+  /**
+   * Human-friendly identifier (e.g. `pmt-46`) derived from the board's
+   * space prefix. Slugs are mutable across `move_board_to_space`; the
+   * internal `id` is the stable identifier.
+   */
+  slug: string;
   title: string;
   description: string;
   position: number;
@@ -227,6 +257,19 @@ export interface ImportResult {
 }
 
 export type ServerEvent =
+  | { type: "space.created"; data: { spaceId: string; space: Space } }
+  | { type: "space.updated"; data: { spaceId: string; space: Space } }
+  | { type: "space.deleted"; data: { spaceId: string } }
+  | { type: "spaces.reordered"; data: { ids: string[] } }
+  | { type: "boards.reordered"; data: { spaceId: string; ids: string[] } }
+  | {
+      type: "board.moved_to_space";
+      data: {
+        boardId: string;
+        spaceId: string;
+        reslugged_count: number;
+      };
+    }
   | { type: "board.created"; data: { boardId: string; board: Board } }
   | { type: "board.updated"; data: { boardId: string; board: Board } }
   | { type: "board.deleted"; data: { boardId: string } }

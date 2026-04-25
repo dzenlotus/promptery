@@ -1,7 +1,9 @@
 import type { Database } from "better-sqlite3";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { nanoid } from "nanoid";
 import { DEFAULT_COLUMN_NAMES } from "./queries/boards.js";
+import { getBackupsDir } from "../lib/paths.js";
 
 /**
  * Simple file-less migration system.
@@ -33,6 +35,8 @@ export function runMigrations(db: Database, opts: RunMigrationsOptions = {}): vo
   if (includeFTS) {
     runMigration(db, "008_tasks_fts", apply008TasksFts);
   }
+  runMigration(db, "009_spaces", apply009Spaces);
+  runMigration(db, "010_board_position", apply010BoardPosition);
   backfillDefaultColumnsForEmptyBoards(db);
 }
 
@@ -55,9 +59,58 @@ function ensureMigrationsTable(db: Database): void {
   );
 }
 
+/**
+ * Migrations that ALTER existing columns / DROP columns / rebuild tables —
+ * the kind whose failure could leave a DB in a partially-migrated state
+ * even with the surrounding transaction. We snapshot the DB to
+ * `~/.promptery/backups/db-pre-<name>-<ts>.sqlite` immediately before the
+ * apply step so the user can `promptery restore <filename>` if anything
+ * goes wrong. Pure additive migrations (CREATE TABLE / INSERT) don't need
+ * the safety net.
+ */
+const DESTRUCTIVE_MIGRATIONS = new Set<string>([
+  "009_spaces",
+  "010_board_position",
+]);
+
+function snapshotBeforeMigration(db: Database, name: string): void {
+  // The in-memory test DBs (createTestDb) don't expose a real filename, so
+  // VACUUM INTO would write to disk for nothing. Skip them — tests have
+  // their own per-test isolation.
+  // better-sqlite3 stores the path on `db.name`; ":memory:" for in-memory.
+  const dbName = (db as unknown as { name?: string }).name;
+  if (!dbName || dbName === ":memory:") return;
+
+  try {
+    const dir = getBackupsDir();
+    mkdirSync(dir, { recursive: true });
+    const ts = formatTimestamp(new Date());
+    const fullPath = join(dir, `db-pre-${name}-${ts}.sqlite`);
+    db.prepare("VACUUM INTO ?").run(fullPath);
+    console.log(`[promptery] pre-migration snapshot: ${fullPath}`);
+  } catch (err) {
+    // Best-effort: log and continue. Refusing to apply the migration
+    // because of a backup-path issue would leave the user worse off than
+    // proceeding without one.
+    console.warn(
+      `[promptery] pre-migration snapshot failed (${name}):`,
+      err instanceof Error ? err.message : err
+    );
+  }
+}
+
+function formatTimestamp(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
+
 function runMigration(db: Database, name: string, apply: (db: Database) => void): void {
   const row = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get(name);
   if (row) return;
+
+  if (DESTRUCTIVE_MIGRATIONS.has(name)) {
+    snapshotBeforeMigration(db, name);
+  }
 
   const tx = db.transaction(() => {
     apply(db);
@@ -283,6 +336,204 @@ function apply008TasksFts(db: Database): void {
     `INSERT INTO tasks_fts(task_id, title, description)
      SELECT id, title, description FROM tasks
      WHERE id NOT IN (SELECT task_id FROM tasks_fts)`
+  );
+}
+
+/**
+ * Apply 009: workspace organisation layer.
+ *
+ * Three concerns:
+ *  - Stand up `spaces` and `space_counters` (idempotent — schema.sql also
+ *    declares these for fresh installs).
+ *  - Seed exactly one default space, plus an additional Promptery space
+ *    when the existing DB has boards whose names start with "Promptery"
+ *    (covers the maintainer's personal DB; everyone else lands in the
+ *    default space).
+ *  - Add `boards.space_id` and populate it; replace `tasks.number` with
+ *    `tasks.slug` (minted in `created_at` order, per-space).
+ *
+ * Schema drift note: on legacy DBs upgraded through this migration the
+ * `space_id` and `slug` columns are nullable in the table definition,
+ * because SQLite doesn't allow ALTER TABLE … ADD COLUMN NOT NULL without
+ * a default. Application code always populates both fields, and the
+ * UNIQUE INDEX on slug enforces uniqueness either way. Fresh installs
+ * (schema.sql) get the stricter NOT NULL declaration.
+ */
+function apply009Spaces(db: Database): void {
+  const sqlUrl = new URL("./migrations/009_spaces.sql", import.meta.url);
+  db.exec(readFileSync(sqlUrl, "utf-8"));
+
+  const now = Date.now();
+
+  // 1. Default space — exactly one row with is_default = 1.
+  let defaultSpaceId: string;
+  const existingDefault = db
+    .prepare("SELECT id FROM spaces WHERE is_default = 1")
+    .get() as { id: string } | undefined;
+  if (existingDefault) {
+    defaultSpaceId = existingDefault.id;
+  } else {
+    defaultSpaceId = nanoid();
+    db.prepare(
+      `INSERT INTO spaces (id, name, prefix, is_default, position, created_at, updated_at)
+       VALUES (?, 'Default', 'task', 1, 0, ?, ?)`
+    ).run(defaultSpaceId, now, now);
+    db.prepare(
+      "INSERT INTO space_counters (space_id, next_number) VALUES (?, 1)"
+    ).run(defaultSpaceId);
+  }
+
+  // 2. Promptery space — only when existing data warrants it. Detection by
+  // board-name prefix matches the maintainer's setup ("Promptery",
+  // "Promptery — Analytics", …) without forcing every other user through
+  // a noisy second space they didn't ask for.
+  let promptrySpaceId: string | null = null;
+  const promptryHits = db
+    .prepare("SELECT COUNT(*) AS c FROM boards WHERE name LIKE 'Promptery%'")
+    .get() as { c: number };
+  if (promptryHits.c > 0) {
+    const existing = db
+      .prepare("SELECT id FROM spaces WHERE prefix = 'pmt'")
+      .get() as { id: string } | undefined;
+    if (existing) {
+      promptrySpaceId = existing.id;
+    } else {
+      promptrySpaceId = nanoid();
+      db.prepare(
+        `INSERT INTO spaces (id, name, prefix, is_default, position, created_at, updated_at)
+         VALUES (?, 'Promptery', 'pmt', 0, 1, ?, ?)`
+      ).run(promptrySpaceId, now, now);
+      db.prepare(
+        "INSERT INTO space_counters (space_id, next_number) VALUES (?, 1)"
+      ).run(promptrySpaceId);
+    }
+  }
+
+  // 3. Add `boards.space_id` if missing and populate from the detection
+  // above. Promptery boards (by name prefix) → Promptery space; everything
+  // else → default space.
+  const boardCols = db.prepare("PRAGMA table_info(boards)").all() as {
+    name: string;
+  }[];
+  if (!boardCols.some((c) => c.name === "space_id")) {
+    db.exec("ALTER TABLE boards ADD COLUMN space_id TEXT REFERENCES spaces(id)");
+    if (promptrySpaceId) {
+      db.prepare(
+        "UPDATE boards SET space_id = ? WHERE name LIKE 'Promptery%'"
+      ).run(promptrySpaceId);
+    }
+    db.prepare("UPDATE boards SET space_id = ? WHERE space_id IS NULL").run(
+      defaultSpaceId
+    );
+    db.exec("CREATE INDEX IF NOT EXISTS idx_boards_space ON boards(space_id)");
+  }
+
+  // 4. Replace `tasks.number` with `tasks.slug`. SQLite 3.35+ supports
+  // DROP COLUMN; better-sqlite3 12.x ships with a recent enough engine.
+  const taskCols = db.prepare("PRAGMA table_info(tasks)").all() as {
+    name: string;
+  }[];
+  if (!taskCols.some((c) => c.name === "slug")) {
+    db.exec("ALTER TABLE tasks ADD COLUMN slug TEXT");
+
+    type LegacyTask = {
+      id: string;
+      space_id: string;
+      created_at: number;
+    };
+    const legacyTasks = db
+      .prepare(
+        `SELECT t.id, b.space_id, t.created_at
+           FROM tasks t
+           JOIN boards b ON b.id = t.board_id
+          ORDER BY t.created_at ASC, t.id ASC`
+      )
+      .all() as LegacyTask[];
+
+    const prefixOf = new Map<string, string>();
+    const getPrefix = (sid: string): string => {
+      const cached = prefixOf.get(sid);
+      if (cached) return cached;
+      const row = db
+        .prepare("SELECT prefix FROM spaces WHERE id = ?")
+        .get(sid) as { prefix: string } | undefined;
+      if (!row) {
+        throw new Error(`apply009Spaces: space ${sid} missing during slug backfill`);
+      }
+      prefixOf.set(sid, row.prefix);
+      return row.prefix;
+    };
+
+    // For each space we track the *next available* slug counter — i.e. the
+    // value that would be used for the next mint. After the loop this is
+    // exactly what space_counters.next_number should hold.
+    const nextAvailable = new Map<string, number>();
+    const setSlug = db.prepare("UPDATE tasks SET slug = ? WHERE id = ?");
+    for (const t of legacyTasks) {
+      const prefix = getPrefix(t.space_id);
+      const n = nextAvailable.get(t.space_id) ?? 1;
+      nextAvailable.set(t.space_id, n + 1);
+      setSlug.run(`${prefix}-${n}`, t.id);
+    }
+
+    // Advance per-space counters to the next available value. Spaces with
+    // zero tasks aren't in the map and stay at next_number = 1.
+    const updateCounter = db.prepare(
+      "UPDATE space_counters SET next_number = ? WHERE space_id = ?"
+    );
+    for (const [sid, n] of nextAvailable.entries()) {
+      updateCounter.run(n, sid);
+    }
+
+    if (taskCols.some((c) => c.name === "number")) {
+      db.exec("ALTER TABLE tasks DROP COLUMN number");
+    }
+    db.exec(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_slug_unique ON tasks(slug)"
+    );
+    db.exec("CREATE INDEX IF NOT EXISTS idx_tasks_slug ON tasks(slug)");
+  }
+}
+
+/**
+ * Apply 010: add `boards.position` and backfill it in created_at order so the
+ * pre-migration sort is preserved on first run. The column carries `NOT NULL
+ * DEFAULT 0` for fresh inserts; this step sets meaningful per-space values
+ * for existing rows.
+ */
+function apply010BoardPosition(db: Database): void {
+  const cols = db.prepare("PRAGMA table_info(boards)").all() as { name: string }[];
+  if (!cols.some((c) => c.name === "position")) {
+    db.exec("ALTER TABLE boards ADD COLUMN position REAL NOT NULL DEFAULT 0");
+  }
+
+  // Backfill once: rows that still carry the default 0 get a fresh sequence.
+  // Per-space ordering uses created_at (and id as tiebreaker) so identical
+  // creation timestamps stay stable across reruns.
+  const needsBackfill = db
+    .prepare("SELECT COUNT(*) AS c FROM boards WHERE position = 0")
+    .get() as { c: number };
+  if (needsBackfill.c > 0) {
+    type Row = { id: string; space_id: string; created_at: number };
+    const rows = db
+      .prepare(
+        "SELECT id, space_id, created_at FROM boards ORDER BY space_id, created_at ASC, id ASC"
+      )
+      .all() as Row[];
+    const update = db.prepare("UPDATE boards SET position = ? WHERE id = ?");
+    const counter = new Map<string, number>();
+    const tx = db.transaction(() => {
+      for (const r of rows) {
+        const next = (counter.get(r.space_id) ?? 0) + 1;
+        counter.set(r.space_id, next);
+        update.run(next, r.id);
+      }
+    });
+    tx();
+  }
+
+  db.exec(
+    "CREATE INDEX IF NOT EXISTS idx_boards_space_position ON boards(space_id, position)"
   );
 }
 

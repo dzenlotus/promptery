@@ -358,7 +358,7 @@ describe("searchTasks() — repository unit tests", () => {
       expect(r.task.id).toBeDefined();
       expect(r.task.title).toBeDefined();
       expect(r.task.description).toBeDefined();
-      expect(r.task.number).toBeDefined();
+      expect(r.task.slug).toBeDefined();
       expect(r.task.position).toBeDefined();
       expect(r.task.created_at).toBeDefined();
       expect(r.task.updated_at).toBeDefined();

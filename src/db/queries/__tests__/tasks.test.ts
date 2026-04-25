@@ -37,16 +37,88 @@ function seedBoardWithColumns(db: ReturnType<typeof createTestDb>) {
 }
 
 describe("tasks queries", () => {
-  it("auto-increments number per board and position per column", () => {
+  it("mints sequential slugs from the board's space and advances position per column", () => {
     const db = createTestDb();
     const { board, todo } = seedBoardWithColumns(db);
 
     const first = createTask(db, board.id, todo.id, { title: "first" });
     const second = createTask(db, board.id, todo.id, { title: "second" });
 
-    expect(first.number).toBe(1);
-    expect(second.number).toBe(2);
+    // Default space prefix is "task" (seeded by migration 009).
+    expect(first.slug).toBe("task-1");
+    expect(second.slug).toBe("task-2");
     expect(second.position).toBeGreaterThan(first.position);
+  });
+
+  it("counter does not reuse slugs of deleted tasks", () => {
+    const db = createTestDb();
+    const { board, todo } = seedBoardWithColumns(db);
+
+    const a = createTask(db, board.id, todo.id, { title: "a" });
+    const b = createTask(db, board.id, todo.id, { title: "b" });
+    expect([a.slug, b.slug]).toEqual(["task-1", "task-2"]);
+
+    deleteTask(db, b.id);
+    const c = createTask(db, board.id, todo.id, { title: "c" });
+
+    // Counter advanced past `task-2`; freed slugs are not reused.
+    expect(c.slug).toBe("task-3");
+  });
+
+  it("each space carries its own counter — no cross-space slug bleed", async () => {
+    const db = createTestDb();
+
+    // Two boards in two different spaces; each starts its own counter at 1.
+    const { createSpace } = await import("../spaces.js");
+    const ana = createSpace(db, { name: "Ana", prefix: "ana" });
+    const pmt = createSpace(db, { name: "Pmt", prefix: "pmt" });
+
+    const { createBoard } = await import("../boards.js");
+    const { createColumn } = await import("../columns.js");
+
+    const boardAna = createBoard(db, "BAna", { space_id: ana.id });
+    const boardPmt = createBoard(db, "BPmt", { space_id: pmt.id });
+    const colAna = createColumn(db, boardAna.id, "todo");
+    const colPmt = createColumn(db, boardPmt.id, "todo");
+
+    const a1 = createTask(db, boardAna.id, colAna.id, { title: "a1" });
+    const p1 = createTask(db, boardPmt.id, colPmt.id, { title: "p1" });
+    const a2 = createTask(db, boardAna.id, colAna.id, { title: "a2" });
+    const p2 = createTask(db, boardPmt.id, colPmt.id, { title: "p2" });
+
+    expect([a1.slug, a2.slug]).toEqual(["ana-1", "ana-2"]);
+    expect([p1.slug, p2.slug]).toEqual(["pmt-1", "pmt-2"]);
+  });
+
+  it("schema rejects NULL slug on a fresh install (NOT NULL constraint)", () => {
+    const db = createTestDb();
+    const { board, todo } = seedBoardWithColumns(db);
+
+    // Fresh installs run schema.sql which declares `slug NOT NULL UNIQUE`.
+    // Legacy DBs upgraded through migration 009 have `slug` nullable in
+    // the table definition (SQLite ALTER limitation) but the application
+    // path always sets it, and the UNIQUE INDEX still rejects duplicate
+    // NULLs on most SQLite builds. The fresh-install path is the strict
+    // one and is what new users will see.
+    expect(() =>
+      db
+        .prepare(
+          `INSERT INTO tasks
+             (id, board_id, column_id, slug, title, description, position, created_at, updated_at)
+           VALUES ('a', ?, ?, NULL, 't', '', 0, 0, 0)`
+        )
+        .run(board.id, todo.id)
+    ).toThrowError(/NOT NULL/);
+  });
+
+  it("getTaskBySlug returns the task or null", async () => {
+    const db = createTestDb();
+    const { board, todo } = seedBoardWithColumns(db);
+    const t = createTask(db, board.id, todo.id, { title: "T" });
+
+    const { getTaskBySlug } = await import("../tasks.js");
+    expect(getTaskBySlug(db, t.slug)?.id).toBe(t.id);
+    expect(getTaskBySlug(db, "task-9999")).toBeNull();
   });
 
   it("getTask returns null role and empty relation arrays by default", () => {

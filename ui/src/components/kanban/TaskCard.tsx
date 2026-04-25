@@ -44,7 +44,7 @@ export function TaskCard({ task, boardId, dragOverlay }: Props) {
         ref={setNodeRef}
         style={style}
         data-testid={`task-card-${task.id}`}
-        data-task-number={task.number}
+        data-task-slug={task.slug}
         {...attributes}
         {...listeners}
         onDoubleClick={() => setEditOpen(true)}
@@ -56,7 +56,7 @@ export function TaskCard({ task, boardId, dragOverlay }: Props) {
       >
         <div className="grid grid-cols-[1fr_auto_auto] items-center gap-1">
           <span className="text-[11px] tabular-nums text-[var(--color-text-subtle)]">
-            #{task.number}
+            {task.slug}
           </span>
           <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
             <IconButton

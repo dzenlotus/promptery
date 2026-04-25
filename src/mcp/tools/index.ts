@@ -1,4 +1,5 @@
 import type { HubClient } from "../../bridge/hubClient.js";
+import * as spacesTools from "./spaces.js";
 import * as boardsTools from "./boards.js";
 import * as columnsTools from "./columns.js";
 import * as tasksTools from "./tasks.js";
@@ -42,6 +43,7 @@ function collectTools(mod: Record<string, unknown>): ToolDefinition[] {
 }
 
 export const allTools: ToolDefinition[] = [
+  ...collectTools(spacesTools),
   ...collectTools(boardsTools),
   ...collectTools(columnsTools),
   ...collectTools(tasksTools),

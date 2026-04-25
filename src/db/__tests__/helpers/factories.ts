@@ -1,15 +1,63 @@
 import { nanoid } from "nanoid";
 import type { Database } from "better-sqlite3";
 
+export interface MakeSpaceOptions {
+  id?: string;
+  name?: string;
+  prefix?: string;
+  is_default?: boolean;
+  position?: number;
+}
+
+export interface MadeSpace {
+  id: string;
+  name: string;
+  prefix: string;
+  is_default: boolean;
+  position: number;
+}
+
+export function makeSpace(db: Database, opts: MakeSpaceOptions = {}): MadeSpace {
+  const id = opts.id ?? nanoid();
+  const name = opts.name ?? `Space ${id.slice(0, 6)}`;
+  const prefix = opts.prefix ?? `s${id.slice(0, 4).toLowerCase()}`;
+  const is_default = opts.is_default ?? false;
+  const position = opts.position ?? 0;
+  const now = Date.now();
+  db.prepare(
+    `INSERT INTO spaces (id, name, prefix, is_default, position, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(id, name, prefix, is_default ? 1 : 0, position, now, now);
+  db.prepare(
+    "INSERT INTO space_counters (space_id, next_number) VALUES (?, 1)"
+  ).run(id);
+  return { id, name, prefix, is_default, position };
+}
+
+function defaultSpaceId(db: Database): string {
+  const row = db
+    .prepare("SELECT id FROM spaces WHERE is_default = 1")
+    .get() as { id: string } | undefined;
+  if (!row) {
+    throw new Error(
+      "factories.makeBoard: no default space — did you call createTestDb()?"
+    );
+  }
+  return row.id;
+}
+
 export interface MakeBoardOptions {
   id?: string;
   name?: string;
   role_id?: string | null;
+  /** Defaults to the default space's id. */
+  space_id?: string;
 }
 
 export interface MadeBoard {
   id: string;
   name: string;
+  space_id: string;
   role_id: string | null;
 }
 
@@ -17,11 +65,13 @@ export function makeBoard(db: Database, opts: MakeBoardOptions = {}): MadeBoard 
   const id = opts.id ?? nanoid();
   const name = opts.name ?? `Board ${id.slice(0, 6)}`;
   const role_id = opts.role_id ?? null;
+  const space_id = opts.space_id ?? defaultSpaceId(db);
   const now = Date.now();
   db.prepare(
-    "INSERT INTO boards (id, name, role_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
-  ).run(id, name, role_id, now, now);
-  return { id, name, role_id };
+    `INSERT INTO boards (id, name, space_id, role_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  ).run(id, name, space_id, role_id, now, now);
+  return { id, name, space_id, role_id };
 }
 
 export interface MakeColumnOptions {
@@ -53,6 +103,17 @@ export function makeColumn(db: Database, opts: MakeColumnOptions): MadeColumn {
 
 export interface MakeTaskOptions {
   id?: string;
+  /**
+   * Optional explicit slug. When omitted, the factory mints a unique slug
+   * using a per-process counter so tests don't have to manage slug values.
+   * Pass a real value when the test asserts slug content.
+   */
+  slug?: string;
+  /**
+   * Legacy alias kept so existing call sites that pass `number: N` keep
+   * compiling. Used only as a hint for the auto-generated slug
+   * (`fixt-<number>`); set `slug` explicitly when you need a specific value.
+   */
   number?: number;
   title?: string;
   description?: string;
@@ -72,7 +133,7 @@ export interface MadeTask {
   id: string;
   board_id: string;
   column_id: string;
-  number: number;
+  slug: string;
   title: string;
   description: string;
   position: number;
@@ -80,6 +141,8 @@ export interface MadeTask {
   created_at: number;
   updated_at: number;
 }
+
+let factoryTaskCounter = 0;
 
 export function makeTask(db: Database, opts: MakeTaskOptions): MadeTask {
   // tasks.board_id is NOT NULL on the schema; deriving it from column_id
@@ -93,7 +156,12 @@ export function makeTask(db: Database, opts: MakeTaskOptions): MadeTask {
   }
 
   const id = opts.id ?? nanoid();
-  const number = opts.number ?? 1;
+  factoryTaskCounter += 1;
+  const slug =
+    opts.slug ??
+    (opts.number !== undefined
+      ? `fixt-${opts.number}-${factoryTaskCounter}`
+      : `fixt-${factoryTaskCounter}`);
   const title = opts.title ?? `Task ${id.slice(0, 6)}`;
   const description = opts.description ?? "";
   const position = opts.position ?? 0;
@@ -104,13 +172,13 @@ export function makeTask(db: Database, opts: MakeTaskOptions): MadeTask {
 
   db.prepare(
     `INSERT INTO tasks
-       (id, board_id, column_id, number, title, description, position, role_id, created_at, updated_at)
+       (id, board_id, column_id, slug, title, description, position, role_id, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     colRow.board_id,
     opts.column_id,
-    number,
+    slug,
     title,
     description,
     position,
@@ -123,7 +191,7 @@ export function makeTask(db: Database, opts: MakeTaskOptions): MadeTask {
     id,
     board_id: colRow.board_id,
     column_id: opts.column_id,
-    number,
+    slug,
     title,
     description,
     position,

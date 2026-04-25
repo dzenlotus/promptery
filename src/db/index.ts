@@ -38,18 +38,23 @@ function seedDefaults(db: Database.Database): void {
   const row = db.prepare("SELECT COUNT(*) AS c FROM boards").get() as { c: number };
   if (row.c > 0) return;
 
+  // Migration 009 has already created exactly one row marked is_default = 1.
+  const defaultSpace = db
+    .prepare("SELECT id FROM spaces WHERE is_default = 1")
+    .get() as { id: string };
+
   const now = Date.now();
   const boardId = nanoid();
 
   const insertBoard = db.prepare(
-    "INSERT INTO boards (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)"
+    "INSERT INTO boards (id, name, space_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
   );
   const insertColumn = db.prepare(
     "INSERT INTO columns (id, board_id, name, position, created_at) VALUES (?, ?, ?, ?, ?)"
   );
 
   const tx = db.transaction(() => {
-    insertBoard.run(boardId, "My Board", now, now);
+    insertBoard.run(boardId, "My Board", defaultSpace.id, now, now);
     ["todo", "in-progress", "qa", "done"].forEach((name, idx) => {
       insertColumn.run(nanoid(), boardId, name, idx, now);
     });

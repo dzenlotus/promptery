@@ -12,6 +12,7 @@ import type {
   ImportResult,
   ImportStrategy,
   McpTool,
+  MoveBoardToSpaceResult,
   Prompt,
   PromptGroup,
   PromptGroupWithPrompts,
@@ -19,6 +20,8 @@ import type {
   Role,
   RoleWithRelations,
   Skill,
+  Space,
+  SpaceWithBoards,
   Task,
   UpdatePrimitiveInput,
   UpdateTaskInput,
@@ -91,13 +94,47 @@ export const api = {
   meta: {
     get: () => request<MetaInfo>("/api/meta"),
   },
+  spaces: {
+    list: () => request<Space[]>("/api/spaces"),
+    get: (id: string) => request<SpaceWithBoards>(`/api/spaces/${id}`),
+    create: (data: { name: string; prefix: string; description?: string }) =>
+      request<Space>("/api/spaces", { method: "POST", body: json(data) }),
+    update: (
+      id: string,
+      patch: { name?: string; prefix?: string; description?: string | null }
+    ) => request<Space>(`/api/spaces/${id}`, { method: "PATCH", body: json(patch) }),
+    delete: (id: string) =>
+      request<{ ok: true }>(`/api/spaces/${id}`, { method: "DELETE" }),
+    reorder: (ids: string[]) =>
+      request<Space[]>("/api/spaces/reorder", {
+        method: "POST",
+        body: json({ ids }),
+      }),
+  },
   boards: {
     list: () => request<Board[]>("/api/boards"),
     get: (id: string) => request<BoardWithRelations>(`/api/boards/${id}`),
-    create: (name: string) => request<Board>("/api/boards", { method: "POST", body: json({ name }) }),
+    create: (name: string, opts?: { space_id?: string }) =>
+      request<Board>("/api/boards", {
+        method: "POST",
+        body: json({ name, ...(opts?.space_id ? { space_id: opts.space_id } : {}) }),
+      }),
     update: (id: string, name: string) =>
       request<Board>(`/api/boards/${id}`, { method: "PATCH", body: json({ name }) }),
     delete: (id: string) => request<{ ok: true }>(`/api/boards/${id}`, { method: "DELETE" }),
+    moveToSpace: (id: string, spaceId: string, position?: number) =>
+      request<MoveBoardToSpaceResult>(`/api/boards/${id}/move-to-space`, {
+        method: "POST",
+        body: json({
+          space_id: spaceId,
+          ...(position !== undefined ? { position } : {}),
+        }),
+      }),
+    reorder: (spaceId: string, ids: string[]) =>
+      request<Board[]>("/api/boards/reorder", {
+        method: "POST",
+        body: json({ space_id: spaceId, ids }),
+      }),
     setRole: (id: string, roleId: string | null) =>
       request<Board>(`/api/boards/${id}/role`, {
         method: "PUT",
@@ -170,6 +207,17 @@ export const api = {
     removeMcpTool: (id: string, toolId: string) =>
       request<Task>(`/api/tasks/${id}/mcp_tools/${toolId}`, { method: "DELETE" }),
     context: (id: string) => request<ResolvedTaskContext>(`/api/tasks/${id}/context`),
+    /**
+     * Resolve either a slug (`pmt-46`) or an internal id (CUID) to the
+     * task's location envelope. Used by the `/t/<idOrSlug>` URL redirect
+     * so external links can carry either form.
+     */
+    withLocation: (idOrSlug: string) =>
+      request<{
+        task: Task;
+        column: { id: string; name: string; position: number };
+        board: { id: string; name: string };
+      }>(`/api/tasks/${encodeURIComponent(idOrSlug)}/with-location`),
   },
   prompts: primitiveResource<Prompt>("/api/prompts"),
   promptGroups: {

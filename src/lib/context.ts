@@ -156,7 +156,7 @@ function renderTaskSection(
 
   return wrapElements(
     "task",
-    { id: String(task.number), title: task.title },
+    { id: task.slug, title: task.title },
     inner.join("\n\n")
   );
 }

@@ -11,13 +11,26 @@ export interface Task {
   id: string;
   board_id: string;
   column_id: string;
-  number: number;
+  /**
+   * Human-friendly identifier of the form `<space.prefix>-<n>` (e.g. `pmt-46`).
+   * Slugs are minted at creation; they may CHANGE if the task's board is
+   * moved to a different space (the slug is then re-derived from the new
+   * space's prefix and counter). The internal `id` remains stable across
+   * moves and is the right handle for any reference you need to persist.
+   */
+  slug: string;
   title: string;
   description: string;
   position: number;
   role_id: string | null;
   created_at: number;
   updated_at: number;
+}
+
+const SLUG_PATTERN = /^[a-z0-9-]{1,10}-\d+$/;
+
+export function isSlugFormat(value: string): boolean {
+  return SLUG_PATTERN.test(value);
 }
 
 export interface TaskWithRelations extends Task {
@@ -81,42 +94,82 @@ export function getTask(db: Database, id: string): TaskWithRelations | null {
   return attachRelations(db, task);
 }
 
+/**
+ * Create a task. The slug is minted server-side from the board's space
+ * prefix and the per-space counter. Counter increment + task insert happen
+ * inside one transaction so two concurrent inserts cannot collide on a slug.
+ */
 export function createTask(
   db: Database,
   boardId: string,
   columnId: string,
   input: CreateTaskInput
 ): Task {
-  const numberRow = db
-    .prepare("SELECT COALESCE(MAX(number), 0) + 1 AS next FROM tasks WHERE board_id = ?")
-    .get(boardId) as { next: number };
-  const posRow = db
-    .prepare(
-      "SELECT COALESCE(MAX(position), 0) + 1 AS next FROM tasks WHERE board_id = ? AND column_id = ?"
-    )
-    .get(boardId, columnId) as { next: number };
-
   const id = nanoid();
   const now = Date.now();
   const description = input.description ?? "";
-  db.prepare(
-    `INSERT INTO tasks
-     (id, board_id, column_id, number, title, description, position, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(id, boardId, columnId, numberRow.next, input.title, description, posRow.next, now, now);
+
+  let slug = "";
+  let position = 0;
+
+  const tx = db.transaction(() => {
+    const spaceRow = db
+      .prepare(
+        `SELECT s.id AS space_id, s.prefix
+           FROM boards b
+           JOIN spaces s ON s.id = b.space_id
+          WHERE b.id = ?`
+      )
+      .get(boardId) as { space_id: string; prefix: string } | undefined;
+    if (!spaceRow) {
+      throw new Error(`createTask: board ${boardId} not found`);
+    }
+
+    const counterRow = db
+      .prepare(
+        "SELECT next_number FROM space_counters WHERE space_id = ?"
+      )
+      .get(spaceRow.space_id) as { next_number: number } | undefined;
+    const next = counterRow?.next_number ?? 1;
+    slug = `${spaceRow.prefix}-${next}`;
+    db.prepare(
+      "UPDATE space_counters SET next_number = ? WHERE space_id = ?"
+    ).run(next + 1, spaceRow.space_id);
+
+    const posRow = db
+      .prepare(
+        "SELECT COALESCE(MAX(position), 0) + 1 AS next FROM tasks WHERE board_id = ? AND column_id = ?"
+      )
+      .get(boardId, columnId) as { next: number };
+    position = posRow.next;
+
+    db.prepare(
+      `INSERT INTO tasks
+         (id, board_id, column_id, slug, title, description, position, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(id, boardId, columnId, slug, input.title, description, position, now, now);
+  });
+  tx();
 
   return {
     id,
     board_id: boardId,
     column_id: columnId,
-    number: numberRow.next,
+    slug,
     title: input.title,
     description,
-    position: posRow.next,
+    position,
     role_id: null,
     created_at: now,
     updated_at: now,
   };
+}
+
+export function getTaskBySlug(db: Database, slug: string): Task | null {
+  const row = db.prepare("SELECT * FROM tasks WHERE slug = ?").get(slug) as
+    | Task
+    | undefined;
+  return row ?? null;
 }
 
 export function updateTask(db: Database, id: string, input: UpdateTaskInput): Task | null {
@@ -201,6 +254,14 @@ export interface TaskWithLocation {
   task: Task;
   column: Pick<Column, "id" | "name" | "position">;
   board: Pick<Board, "id" | "name">;
+  /**
+   * How this hit was matched, when surfaced via `searchTasks`:
+   *  - `exact` — the query was the task's slug verbatim. Always rank 0.
+   *  - `fts`   — full-text match on title/description.
+   * Absent on hits that come from non-search code paths (e.g.
+   * `getTaskWithLocation`, the empty-query listing path).
+   */
+  match_type?: "exact" | "fts";
 }
 
 export interface SearchTasksOptions {
@@ -223,7 +284,7 @@ const TASK_FIELDS = [
   "id",
   "board_id",
   "column_id",
-  "number",
+  "slug",
   "title",
   "description",
   "position",
@@ -277,10 +338,48 @@ export function searchTasks(db: Database, opts: SearchTasksOptions): TaskWithLoc
   const params: unknown[] = [];
   const hasQuery = !!(opts.query && opts.query.trim().length > 0);
 
+  // Slug shortcut: if the query *is* a slug, return that task as the top
+  // result with `match_type: 'exact'`. The FTS pass below still runs (a
+  // user typing `pmt-46` may want substring hits in descriptions too), and
+  // dedupe at the end keeps the exact match while dropping the FTS row
+  // that points at the same task.
+  let exactSlugHit: TaskWithLocation | null = null;
+  if (hasQuery) {
+    const trimmed = opts.query!.trim();
+    if (isSlugFormat(trimmed)) {
+      const row = db
+        .prepare(
+          `SELECT t.id, t.board_id, t.column_id, t.slug, t.title, t.description,
+                  t.position, t.role_id, t.created_at, t.updated_at,
+                  c.id AS col_id, c.name AS col_name, c.position AS col_position,
+                  b.id AS brd_id, b.name AS brd_name
+             FROM tasks t
+             JOIN columns c ON c.id = t.column_id
+             JOIN boards b ON b.id = c.board_id
+            WHERE t.slug = ?`
+        )
+        .get(trimmed) as JoinedRow | undefined;
+      if (row) {
+        // Apply the same scope filters that compose with FTS so an exact
+        // slug hit doesn't escape a board/column/role narrowing.
+        const passesFilters =
+          (!opts.board_id || row.brd_id === opts.board_id) &&
+          (!opts.column_id || row.col_id === opts.column_id) &&
+          (!opts.role_id || row.role_id === opts.role_id);
+        if (passesFilters) {
+          exactSlugHit = {
+            ...rowToTaskWithLocation(row),
+            match_type: "exact",
+          };
+        }
+      }
+    }
+  }
+
   let sql: string;
   if (hasQuery) {
     sql = `
-      SELECT t.id, t.board_id, t.column_id, t.number, t.title, t.description,
+      SELECT t.id, t.board_id, t.column_id, t.slug, t.title, t.description,
              t.position, t.role_id, t.created_at, t.updated_at,
              c.id AS col_id, c.name AS col_name, c.position AS col_position,
              b.id AS brd_id, b.name AS brd_name
@@ -293,7 +392,7 @@ export function searchTasks(db: Database, opts: SearchTasksOptions): TaskWithLoc
     params.push(escapeFtsQuery(opts.query!));
   } else {
     sql = `
-      SELECT t.id, t.board_id, t.column_id, t.number, t.title, t.description,
+      SELECT t.id, t.board_id, t.column_id, t.slug, t.title, t.description,
              t.position, t.role_id, t.created_at, t.updated_at,
              c.id AS col_id, c.name AS col_name, c.position AS col_position,
              b.id AS brd_id, b.name AS brd_name
@@ -334,7 +433,20 @@ export function searchTasks(db: Database, opts: SearchTasksOptions): TaskWithLoc
   params.push(limit);
 
   const rows = db.prepare(sql).all(...(params as [unknown, ...unknown[]])) as JoinedRow[];
-  return rows.map(rowToTaskWithLocation);
+  const ftsResults: TaskWithLocation[] = rows.map((r) => ({
+    ...rowToTaskWithLocation(r),
+    match_type: hasQuery ? ("fts" as const) : undefined,
+  }));
+
+  if (exactSlugHit) {
+    // Drop any FTS row pointing at the same task — the exact match wins.
+    const filtered = ftsResults.filter(
+      (r) => r.task.id !== exactSlugHit!.task.id
+    );
+    // Cap the combined output at `limit` — the exact match counts toward it.
+    return [exactSlugHit, ...filtered].slice(0, limit);
+  }
+  return ftsResults;
 }
 
 /**
@@ -344,7 +456,7 @@ export function searchTasks(db: Database, opts: SearchTasksOptions): TaskWithLoc
 export function getTaskWithLocation(db: Database, id: string): TaskWithLocation | null {
   const row = db
     .prepare(
-      `SELECT t.id, t.board_id, t.column_id, t.number, t.title, t.description,
+      `SELECT t.id, t.board_id, t.column_id, t.slug, t.title, t.description,
               t.position, t.role_id, t.created_at, t.updated_at,
               c.id AS col_id, c.name AS col_name, c.position AS col_position,
               b.id AS brd_id, b.name AS brd_name

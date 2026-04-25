@@ -1,3 +1,4 @@
+export * from "./spaces.js";
 export * from "./boards.js";
 export * from "./columns.js";
 export * from "./tasks.js";

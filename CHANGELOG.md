@@ -1,5 +1,144 @@
 # Changelog
 
+## 0.3.0 — 2026-04-25
+
+Headline release introducing **Spaces** — a workspace organisation layer above
+boards — and replacing per-board task numbers with workspace-wide slugs. The
+MCP surface is now minimal-by-default to stop burning agent context.
+
+### Breaking changes
+
+- **`tasks.number` is removed**, replaced by `tasks.slug` (e.g. `pmt-46`).
+  Existing DBs migrate automatically: tasks on boards whose names start with
+  "Promptery" land in a `pmt`-prefixed Promptery space; everything else lands
+  in a default `task`-prefixed space. Slugs are minted in `created_at` order
+  with `id` as tiebreaker for ties.
+- **MCP response shapes are minimal by default.** Every write tool returns
+  `{id, ...minimal_changed_fields}` (50–200 bytes); every read tool except
+  `get_task_bundle` and `get_prompt` returns navigation metadata only — no
+  description, no full role/prompt content. Code that previously reached into
+  `description` / `role.prompts` etc. on MCP responses needs to call
+  `get_task_bundle(id_or_slug)` (XML for system prompt) or `get_prompt(id)`
+  (single prompt's content) instead. The HTTP API is unchanged.
+
+### Added — Spaces
+
+- **Schema**: new `spaces` table (`id`, `name`, `prefix`, `description`,
+  `is_default`, `position`, timestamps; `prefix` constrained to
+  `^[a-z0-9-]{1,10}$` and globally unique). New `space_counters` table for
+  per-space slug minting. `boards.space_id NOT NULL` references `spaces`. One
+  default space is system-managed and cannot be deleted.
+- **HTTP API**: `/api/spaces` CRUD; `POST /api/boards/:id/move-to-space` with
+  optional `position`; `POST /api/spaces/reorder` and `POST /api/boards/reorder`
+  for bulk position updates. Error envelope carries machine-readable `code`
+  fields (`PrefixCollision`, `DefaultSpaceImmutable`, `SpaceHasBoards`,
+  `InvalidPrefix`) so the UI and agents can surface precise messaging.
+- **MCP tools**: `list_spaces`, `get_space`, `create_space`, `update_space`,
+  `delete_space`, `move_board_to_space`. `create_board` accepts optional
+  `space_id` (defaults to default space). All carry minimal-shape responses.
+- **`move_board_to_space` semantics**: re-slugs every task on the moved board
+  to the destination space's prefix; the destination counter advances by the
+  number of tasks moved. **Internal task `id` is preserved** across the move —
+  any reference held by id keeps resolving. The slug is the mutable handle.
+- **UI sidebar**: Spaces section above Boards section. Each space has a
+  chevron toggle, a per-space `+` button to create a board inside it, and a
+  context menu (Edit, Delete). The default space's contents render under
+  "Boards" without a wrapper, pinned at the bottom. Expand/collapse state
+  persists per space in `localStorage` (`promptery.spaces.expanded`).
+- **Drag-and-drop sidebar**: reorder spaces, reorder boards within a space,
+  drag boards across spaces. Cross-space drops re-slug the moved board's tasks
+  to match the destination prefix; intra-space drops fully renumber `position`
+  1..N to avoid floating-point drift over many drags. The `⋮⋮` grip handle
+  on each space row keeps the rest of the row clickable for navigation.
+- **Space settings page** at `/s/:id` — name, prefix, description editable
+  inline, "Move to…" dropdown next to each contained board for cross-space
+  moves, danger-zone Delete (disabled while boards remain). Default space's
+  prefix field is disabled with a "fixed at `task`" hint.
+
+### Added — Slugs
+
+- Every task carries `slug TEXT NOT NULL UNIQUE` of the form
+  `<space.prefix>-<n>` minted atomically inside the same transaction as the
+  task insert. `space_counters.next_number` increments alongside.
+- **`get_task_bundle(id_or_slug)`** and **`/api/tasks/:idOrSlug/with-location`**
+  accept either a slug (regex `^[a-z0-9-]{1,10}-\d+$`) or an internal id.
+  Slug detection is via format; non-matching strings fall through to id-based
+  lookup.
+- **Slug exact match in `search_tasks`**: when the query matches the slug
+  format, the slug-carrying task is returned as the top result with
+  `match_type: "exact"`, regardless of FTS rank. Other hits carry
+  `match_type: "fts"`. Dedupe drops the FTS row pointing at the exact-matched
+  task to avoid double entries. Filter scopes (`board_id`, `column_id`,
+  `role_id`) compose with the exact-match path.
+- **UI**: task cards and dialog show slug instead of `#42`-style numbers.
+  XML `<task id="...">` from `get_task_bundle` carries the slug.
+
+### Added — URL routing
+
+- `/t/<idOrSlug>` — external-friendly task URL, resolves through the server
+  and redirects to the task's board (`replace: true`, so the back button
+  skips the redirect step).
+- `/b/<id>` — short alias for `/board/<id>` matching the `/s/<id>` and
+  `/t/<id>` shape. The legacy `/board/<id>` URL keeps working for saved
+  bookmarks.
+
+### Added — Migration safety
+
+- Destructive migrations (`009_spaces`, `010_board_position`) snapshot the
+  DB to `~/.promptery/backups/db-pre-<name>-<ts>.sqlite` via `VACUUM INTO`
+  immediately before they apply, in addition to the daily auto-backup. The
+  snapshot is skipped for in-memory DBs (tests). Snapshot failures are
+  logged and the migration proceeds — refusing to apply because of a
+  backup-path issue would leave the user worse off.
+
+### Migration plan
+
+1. Migration `009_spaces` creates `spaces` and `space_counters`, seeds the
+   default space, detects existing boards whose names start with "Promptery"
+   and creates a Promptery (`pmt`) space for them. Adds `boards.space_id`
+   and populates it (Promptery boards → `pmt`, all others → default).
+   Replaces `tasks.number` with `tasks.slug` via `ALTER TABLE ADD COLUMN
+   slug` + UPDATE pass + `ALTER TABLE DROP COLUMN number`. Counter is
+   advanced past the highest minted slug per space. Snapshot is taken
+   before the apply step.
+2. Migration `010_board_position` adds `boards.position REAL NOT NULL
+   DEFAULT 0`, backfills it in `created_at` order per-space, indexes
+   `(space_id, position)`. Snapshot is taken before the apply step.
+3. Both are tracked in `_migrations` and idempotent on re-run.
+
+### Internal — testing infrastructure
+
+- 8 new test files (+89 tests) plus 4 new cases inside `tasks.test.ts`,
+  total 342 → 435 across 44 files:
+  - `src/db/queries/__tests__/spaces.test.ts` (21) — repo CRUD, prefix
+    validation, default-space immutability, has-boards refused, full
+    `moveBoardToSpace` invariant suite (re-slug + id stability + ordering
+    + counter advance + self-move + empty board + `NotFoundError` paths +
+    UNIQUE constraint).
+  - `src/db/__tests__/spaces.migration.test.ts` (8) — empty DB → default
+    space; boards-no-tasks backfill; Promptery detection; full slug
+    ordering across 4 boards / 6 tasks; `tasks.number` removed +
+    `boards.space_id` populated; idempotency; `(created_at, id)`
+    tiebreaker.
+  - `src/db/__tests__/migrations.snapshot.test.ts` (3) — pre-migration
+    `VACUUM INTO` writes a non-empty SQLite snapshot named
+    `db-pre-009_spaces-*` carrying the pre-migration shape; non-destructive
+    migrations skip the snapshot; in-memory DBs skip without throwing.
+  - `src/db/__tests__/tasks-search.slug.test.ts` (7) — slug ranks above
+    FTS, dedupe wins for exact match, scope filters compose, limit applied
+    to combined output.
+  - `src/server/__tests__/spaces.integration.test.ts` (20) — full HTTP
+    coverage of `/api/spaces` CRUD and `move-to-space`.
+  - `src/server/__tests__/reorder.integration.test.ts` (7) — reorder
+    endpoints + `move-to-space` with explicit `position`.
+  - `src/server/__tests__/task-resolve.integration.test.ts` (4) —
+    slug-or-id resolution at `/with-location`.
+  - `src/mcp/__tests__/spaces-via-hub.test.ts` (19) — MCP surface for
+    spaces, plus minimal-response contract assertions for every write tool
+    and every read tool (≤256 bytes; no fat fields leak).
+
+Total: 435/435 tests passing (342 in 0.2.4 → 435 in 0.3.0, +93 net new).
+
 ## 0.2.4 — 2026-04-25
 
 ### Added

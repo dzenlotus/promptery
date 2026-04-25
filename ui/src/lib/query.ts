@@ -10,6 +10,8 @@ export const queryClient = new QueryClient({
 });
 
 export const qk = {
+  spaces: ["spaces"] as const,
+  space: (id: string) => ["space", id] as const,
   boards: ["boards"] as const,
   tasks: (boardId: string) => ["tasks", boardId] as const,
   task: (taskId: string) => ["task", taskId] as const,
@@ -26,5 +28,7 @@ export const qk = {
   board: (id: string) => ["board", id] as const,
   column: (id: string) => ["column", id] as const,
   taskContext: (id: string) => ["task-context", id] as const,
+  taskWithLocation: (idOrSlug: string) =>
+    ["task-with-location", idOrSlug] as const,
   meta: ["meta"] as const,
 };

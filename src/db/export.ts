@@ -44,6 +44,9 @@ export interface ExportBundle {
 export interface BoardRow {
   id: string;
   name: string;
+  /** Present in exports from 0.3.0+; ignored on import (boards land in the
+   *  destination's default space — slugs would collide otherwise). */
+  space_id?: string;
   created_at: number;
   updated_at: number;
 }
@@ -60,7 +63,9 @@ export interface TaskRow {
   id: string;
   board_id: string;
   column_id: string;
-  number: number;
+  /** Present in exports from 0.3.0+; ignored on import (slugs are minted
+   *  fresh against the destination's spaces). */
+  slug?: string;
   title: string;
   description: string | null;
   position: number;

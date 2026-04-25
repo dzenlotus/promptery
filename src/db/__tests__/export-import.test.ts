@@ -227,10 +227,16 @@ describe("import — apply", () => {
     createTask(db, sourceBoard.id, cols[0]!.id, { title: "Task A" });
 
     // Copy board id into target with same primary key to provoke a conflict.
+    // Boards now require space_id; the target's default space is fine here.
     const now = Date.now();
+    const targetDefaultSpace = target
+      .prepare("SELECT id FROM spaces WHERE is_default = 1")
+      .get() as { id: string };
     target
-      .prepare("INSERT INTO boards (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)")
-      .run(sourceBoard.id, "Existing", now, now);
+      .prepare(
+        "INSERT INTO boards (id, name, space_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)"
+      )
+      .run(sourceBoard.id, "Existing", targetDefaultSpace.id, now, now);
 
     const bundle = sourceBundle();
     const result = applyImport(target, bundle, "rename");

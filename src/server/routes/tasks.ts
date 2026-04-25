@@ -61,10 +61,24 @@ tasksRoute.get("/search", (c) => {
 
 /**
  * Lite get_task variant — task + column + board without the role/prompts
- * bundle. Use the bundle endpoint when you need full execution context.
+ * bundle. Accepts either a slug (`pmt-46`) or the internal id (CUID),
+ * matching the /bundle endpoint's behaviour. Slugs are detected via
+ * `isSlugFormat`; non-matching strings are looked up as ids.
+ *
+ * Used by the UI's TaskRedirect view (the `/t/<id>` route) so external
+ * links and agent-shareable references can carry either form.
  */
-tasksRoute.get("/:id/with-location", (c) => {
-  const result = q.getTaskWithLocation(getDb(), c.req.param("id"));
+tasksRoute.get("/:idOrSlug/with-location", (c) => {
+  const idOrSlug = c.req.param("idOrSlug");
+  let canonicalId: string | null = null;
+  if (q.isSlugFormat(idOrSlug)) {
+    const bySlug = q.getTaskBySlug(getDb(), idOrSlug);
+    canonicalId = bySlug?.id ?? null;
+  } else {
+    canonicalId = idOrSlug;
+  }
+  if (!canonicalId) return c.json({ error: "task not found" }, 404);
+  const result = q.getTaskWithLocation(getDb(), canonicalId);
   if (!result) return c.json({ error: "task not found" }, 404);
   return c.json(result);
 });
@@ -91,12 +105,30 @@ tasksRoute.get("/:id/context", (c) => {
  * Returns the task's context bundle as XML (the exact string an agent would
  * paste into its system prompt). MCP's get_task_bundle tool proxies this
  * endpoint verbatim — it ships the agent XML rather than JSON wrapping XML.
+ *
+ * The path segment accepts either a slug (`pmt-46`) or the internal id
+ * (CUID). Slug detection uses the format `^[a-z0-9-]{1,10}-\d+$`; if the
+ * input matches, we resolve the slug to an id first, otherwise we treat
+ * it as an id directly. Slugs are mutable (board moves re-slug them);
+ * the internal id is the stable identifier — agents are encouraged to
+ * persist ids, not slugs.
  */
-tasksRoute.get("/:id/bundle", (c) => {
-  const task = q.getTask(getDb(), c.req.param("id"));
-  if (!task) return c.json({ error: "task not found" }, 404);
-  const context = resolveTaskContext(getDb(), task.id);
-  const xml = buildContextBundle(task, context);
+tasksRoute.get("/:idOrSlug/bundle", (c) => {
+  const idOrSlug = c.req.param("idOrSlug");
+  // Resolve to a canonical id first — keeps the buildContextBundle call site
+  // typed against TaskWithRelations without ternary-branch narrowing tricks.
+  let canonicalId: string | null = null;
+  if (q.isSlugFormat(idOrSlug)) {
+    const bySlug = q.getTaskBySlug(getDb(), idOrSlug);
+    canonicalId = bySlug?.id ?? null;
+  } else {
+    canonicalId = idOrSlug;
+  }
+  if (!canonicalId) return c.json({ error: "task not found" }, 404);
+  const full = q.getTask(getDb(), canonicalId);
+  if (!full) return c.json({ error: "task not found" }, 404);
+  const context = resolveTaskContext(getDb(), full.id);
+  const xml = buildContextBundle(full, context);
   return c.body(xml, 200, { "Content-Type": "application/xml; charset=utf-8" });
 });
 

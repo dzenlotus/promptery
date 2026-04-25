@@ -203,7 +203,7 @@ export function TaskDialog(props: Props) {
     }
   };
 
-  const dialogTitle = mode === "create" ? "Create task" : `Edit task #${props.task.number}`;
+  const dialogTitle = mode === "create" ? "Create task" : `Edit task ${props.task.slug}`;
 
   return (
     <Dialog

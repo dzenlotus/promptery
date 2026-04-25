@@ -1,10 +1,36 @@
+CREATE TABLE IF NOT EXISTS spaces (
+  id          TEXT PRIMARY KEY,
+  name        TEXT NOT NULL,
+  prefix      TEXT NOT NULL UNIQUE,
+  description TEXT,
+  is_default  INTEGER NOT NULL DEFAULT 0,
+  position    REAL NOT NULL DEFAULT 0,
+  created_at  INTEGER NOT NULL,
+  updated_at  INTEGER NOT NULL,
+  CHECK (prefix GLOB '[a-z0-9-]*' AND length(prefix) BETWEEN 1 AND 10)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_spaces_is_default
+  ON spaces(is_default) WHERE is_default = 1;
+CREATE INDEX IF NOT EXISTS idx_spaces_position ON spaces(position);
+
+CREATE TABLE IF NOT EXISTS space_counters (
+  space_id    TEXT PRIMARY KEY REFERENCES spaces(id) ON DELETE CASCADE,
+  next_number INTEGER NOT NULL DEFAULT 1
+);
+
 CREATE TABLE IF NOT EXISTS boards (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  space_id TEXT NOT NULL REFERENCES spaces(id),
   role_id TEXT REFERENCES roles(id) ON DELETE SET NULL,
+  position REAL NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_boards_space ON boards(space_id);
+CREATE INDEX IF NOT EXISTS idx_boards_space_position ON boards(space_id, position);
 
 CREATE TABLE IF NOT EXISTS columns (
   id TEXT PRIMARY KEY,
@@ -55,7 +81,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   id TEXT PRIMARY KEY,
   board_id TEXT NOT NULL REFERENCES boards(id) ON DELETE CASCADE,
   column_id TEXT NOT NULL REFERENCES columns(id) ON DELETE CASCADE,
-  number INTEGER NOT NULL,
+  slug TEXT NOT NULL UNIQUE,
   title TEXT NOT NULL,
   description TEXT DEFAULT '',
   position REAL NOT NULL,
@@ -63,6 +89,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
+
+CREATE INDEX IF NOT EXISTS idx_tasks_slug ON tasks(slug);
 
 CREATE TABLE IF NOT EXISTS role_prompts (
   role_id TEXT NOT NULL REFERENCES roles(id) ON DELETE CASCADE,

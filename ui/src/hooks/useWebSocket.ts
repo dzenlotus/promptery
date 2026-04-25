@@ -11,6 +11,31 @@ export function useWebSocket(): void {
     wsClient.connect();
     const off = wsClient.subscribe((evt: ServerEvent) => {
       switch (evt.type) {
+        case "space.created":
+        case "space.updated":
+        case "space.deleted":
+          qc.invalidateQueries({ queryKey: qk.spaces });
+          if ("spaceId" in evt.data) {
+            qc.invalidateQueries({ queryKey: qk.space(evt.data.spaceId) });
+          }
+          break;
+        case "spaces.reordered":
+          qc.invalidateQueries({ queryKey: qk.spaces });
+          break;
+        case "boards.reordered":
+          // Position is the only thing that changed; the cheapest fresh
+          // read is via the boards list.
+          qc.invalidateQueries({ queryKey: qk.boards });
+          break;
+        case "board.moved_to_space":
+          // Slugs of every task on the board changed; the board's space_id
+          // also changed. Refresh boards, the moved board's tasks, and both
+          // affected spaces.
+          qc.invalidateQueries({ queryKey: qk.spaces });
+          qc.invalidateQueries({ queryKey: qk.boards });
+          qc.invalidateQueries({ queryKey: qk.board(evt.data.boardId) });
+          qc.invalidateQueries({ queryKey: qk.tasks(evt.data.boardId) });
+          break;
         case "board.created":
         case "board.updated":
         case "board.deleted":
@@ -18,6 +43,8 @@ export function useWebSocket(): void {
           if ("boardId" in evt.data) {
             qc.invalidateQueries({ queryKey: qk.board(evt.data.boardId) });
           }
+          // Boards can move between spaces; refresh space board_ids too.
+          qc.invalidateQueries({ queryKey: qk.spaces });
           qc.invalidateQueries({ queryKey: ["task-context"] });
           break;
         case "board.role_changed":
