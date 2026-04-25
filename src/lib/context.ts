@@ -8,6 +8,17 @@ import type {
 } from "../db/inheritance/types.js";
 
 /**
+ * System prompt injected at the top of every bundle that has an active role.
+ * Tells the agent it must delegate work to a sub-agent (the mandatory
+ * delegation protocol). Only present when the bundle has a `<role>` element.
+ */
+export interface SystemPromptEntry {
+  name: string;
+  content: string;
+  short_description?: string | null;
+}
+
+/**
  * Renders a task's full agent context as an XML-tagged string.
  *
  * With the inheritance layer (stage 8.1) prompts can come from up to six
@@ -18,6 +29,8 @@ import type {
  * the resolver in yet.
  *
  * The bundle splits into two top-level sections:
+ *   - `<system_prompts>` — MUST_FOLLOW system-level prompt injected when the
+ *     bundle has an active role (the delegation protocol); omitted otherwise
  *   - `<role>` — identity + everything inherited from the active role
  *     (role prompts, role skills, role MCP tools)
  *   - `<task>` — description + direct attachments specific to this task
@@ -30,17 +43,41 @@ import type {
  */
 export function buildContextBundle(
   task: TaskWithRelations,
-  context?: ResolvedTaskContext | null
+  context?: ResolvedTaskContext | null,
+  systemPrompt?: SystemPromptEntry | null
 ): string {
   const ctx = context ?? synthesiseFromTask(task);
 
   const parts: string[] = [];
+
+  // When a role is active and a system prompt is provided, inject it at the
+  // very top of the bundle as a mandatory delegation instruction.
+  if (ctx.role && systemPrompt) {
+    parts.push(indent(renderSystemPromptsSection(systemPrompt), 1));
+  }
+
   const roleSection = renderRoleSection(task, ctx);
   if (roleSection) parts.push(indent(roleSection, 1));
   parts.push(indent(renderTaskSection(task, ctx), 1));
   const inheritedSection = renderInheritedSection(ctx);
   if (inheritedSection) parts.push(indent(inheritedSection, 1));
   return wrapElements("context", null, parts.join("\n\n"));
+}
+
+/**
+ * Renders the `<system_prompts>` block containing the delegation protocol
+ * prompt with `priority="MUST_FOLLOW"` and `origin="system"` attributes.
+ * Only included when the bundle has an active role.
+ */
+function renderSystemPromptsSection(prompt: SystemPromptEntry): string {
+  const attrs: Record<string, string> = {
+    name: prompt.name,
+    origin: "system",
+    priority: "MUST_FOLLOW",
+  };
+  if (prompt.short_description) attrs.desc = prompt.short_description;
+  const inner = indent(wrapText("prompt", attrs, prompt.content), 1);
+  return wrapElements("system_prompts", null, inner);
 }
 
 function synthesiseFromTask(task: TaskWithRelations): ResolvedTaskContext {

@@ -122,6 +122,15 @@ tasksRoute.get("/:id/context", (c) => {
 });
 
 /**
+ * Hardcoded id and name of the mandatory delegation protocol prompt.
+ * If neither the id nor the name resolves to a prompt, injection is skipped
+ * rather than failing the whole bundle — graceful degradation for DBs that
+ * were created before this prompt was seeded.
+ */
+const DELEGATION_PROMPT_ID = "8oqIrb15DYuTyOfY2IDnH";
+const DELEGATION_PROMPT_NAME = "delegation-protocol-mandatory";
+
+/**
  * Returns the task's context bundle as XML (the exact string an agent would
  * paste into its system prompt). MCP's get_task_bundle tool proxies this
  * endpoint verbatim — it ships the agent XML rather than JSON wrapping XML.
@@ -132,23 +141,45 @@ tasksRoute.get("/:id/context", (c) => {
  * it as an id directly. Slugs are mutable (board moves re-slug them);
  * the internal id is the stable identifier — agents are encouraged to
  * persist ids, not slugs.
+ *
+ * When the resolved context has an active role, the delegation-protocol-
+ * mandatory prompt is prepended at the top of the bundle as a system-level
+ * MUST_FOLLOW instruction so the agent knows it must delegate to a
+ * sub-agent.
  */
 tasksRoute.get("/:idOrSlug/bundle", (c) => {
+  const db = getDb();
   const idOrSlug = c.req.param("idOrSlug");
   // Resolve to a canonical id first — keeps the buildContextBundle call site
   // typed against TaskWithRelations without ternary-branch narrowing tricks.
   let canonicalId: string | null = null;
   if (q.isSlugFormat(idOrSlug)) {
-    const bySlug = q.getTaskBySlug(getDb(), idOrSlug);
+    const bySlug = q.getTaskBySlug(db, idOrSlug);
     canonicalId = bySlug?.id ?? null;
   } else {
     canonicalId = idOrSlug;
   }
   if (!canonicalId) return c.json({ error: "task not found" }, 404);
-  const full = q.getTask(getDb(), canonicalId);
+  const full = q.getTask(db, canonicalId);
   if (!full) return c.json({ error: "task not found" }, 404);
-  const context = resolveTaskContext(getDb(), full.id);
-  const xml = buildContextBundle(full, context);
+  const context = resolveTaskContext(db, full.id);
+
+  // Look up the delegation prompt only when the task has an active role —
+  // tasks without one don't need the sub-agent reminder. Try id first
+  // (fast path on the maintainer's DB), fall back to name (works on a
+  // fresh install once the prompt is seeded; if neither resolves the
+  // bundle still ships, just without the system-level injection).
+  let delegationPrompt:
+    | { name: string; content: string; short_description: string | null }
+    | null = null;
+  if (context?.role) {
+    delegationPrompt =
+      q.getPrompt(db, DELEGATION_PROMPT_ID) ??
+      q.getPromptByName(db, DELEGATION_PROMPT_NAME) ??
+      null;
+  }
+
+  const xml = buildContextBundle(full, context, delegationPrompt);
   return c.body(xml, 200, { "Content-Type": "application/xml; charset=utf-8" });
 });
 
