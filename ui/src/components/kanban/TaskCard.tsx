@@ -2,12 +2,17 @@ import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Pencil, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import type { Task } from "../../lib/types.js";
 import { cn } from "../../lib/cn.js";
 import { IconButton } from "../ui/IconButton.js";
 import { Chip } from "../ui/Chip.js";
 import { TaskDialog } from "../tasks/TaskDialog.js";
 import { TaskDeleteDialog } from "../tasks/TaskDeleteDialog.js";
+import { useUndoRedoStore } from "../../store/undoRedo.js";
+import { api } from "../../lib/api.js";
+import { qk } from "../../lib/query.js";
 
 interface Props {
   task: Task;
@@ -18,6 +23,9 @@ interface Props {
 export function TaskCard({ task, boardId, dragOverlay }: Props) {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+
+  const qc = useQueryClient();
+  const { recordAction } = useUndoRedoStore();
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
@@ -37,6 +45,29 @@ export function TaskCard({ task, boardId, dragOverlay }: Props) {
 
   const extrasCount =
     task.prompts.length + task.skills.length + task.mcp_tools.length;
+
+  const handleDeleted = (_id: string) => {
+    // Capture task snapshot at deletion time so undo can recreate it.
+    const snapshot = task;
+    recordAction({
+      label: `Delete task "${snapshot.title}"`,
+      do: async () => {
+        await api.tasks.delete(snapshot.id);
+        qc.setQueryData<Task[]>(qk.tasks(boardId), (old) =>
+          old?.filter((t) => t.id !== snapshot.id) ?? []
+        );
+      },
+      undo: async () => {
+        const restored = await api.tasks.create(boardId, {
+          column_id: snapshot.column_id,
+          title: snapshot.title,
+          description: snapshot.description,
+        });
+        await qc.invalidateQueries({ queryKey: qk.tasks(boardId) });
+        toast.success(`Task restored as ${restored.slug}`);
+      },
+    });
+  };
 
   return (
     <>
@@ -120,6 +151,7 @@ export function TaskCard({ task, boardId, dragOverlay }: Props) {
         taskTitle={task.title}
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}
+        onDeleted={handleDeleted}
       />
     </>
   );

@@ -22,9 +22,11 @@ import { SettingsDataView } from "./views/SettingsDataView.js";
 import { SettingsAppearanceView } from "./views/SettingsAppearanceView.js";
 import { queryClient } from "./lib/query.js";
 import { useWebSocket } from "./hooks/useWebSocket.js";
+import { useUndoRedoHotkeys } from "./hooks/useUndoRedoHotkeys.js";
 
 function Routed() {
   useWebSocket();
+  useUndoRedoHotkeys();
   return (
     <Switch>
       <Route path="/" component={HomeRedirect} />

@@ -14,6 +14,7 @@ import { usePrompts } from "../hooks/usePrompts.js";
 import { usePromptGroups } from "../hooks/usePromptGroups.js";
 import { useRoles } from "../hooks/useRoles.js";
 import { useTask } from "../hooks/useTasks.js";
+import { useUndoRedoStore } from "../store/undoRedo.js";
 import type { Prompt, UpdatePrimitiveInput } from "../lib/types.js";
 
 /** Parses the `?from=<kind>:<id>` breadcrumb param. */
@@ -70,6 +71,7 @@ function useFromContext(
 export function PromptsView() {
   const qc = useQueryClient();
   const { data: allPrompts = [], isLoading } = usePrompts();
+  const { recordAction } = useUndoRedoStore();
 
   const prompts = useMemo(
     () =>
@@ -180,12 +182,33 @@ export function PromptsView() {
 
   const confirmDelete = async () => {
     if (!deleteTarget) return;
+    const snapshot = deleteTarget;
     try {
-      await deleteMutation.mutateAsync(deleteTarget.id);
-      if (selectedId === deleteTarget.id) clearSelection();
+      await deleteMutation.mutateAsync(snapshot.id);
+      if (selectedId === snapshot.id) clearSelection();
       setDeleteTarget(null);
+
+      recordAction({
+        label: `Delete prompt "${snapshot.name}"`,
+        do: async () => {
+          await api.prompts.delete(snapshot.id);
+          await qc.invalidateQueries({ queryKey: qk.prompts });
+        },
+        undo: async () => {
+          const restored = await api.prompts.create({
+            name: snapshot.name,
+            content: snapshot.content,
+            color: snapshot.color,
+          });
+          qc.setQueryData<Prompt[]>(qk.prompts, (old) =>
+            old ? [...old, restored] : [restored]
+          );
+          await qc.invalidateQueries({ queryKey: qk.prompts });
+          toast.success(`Prompt "${restored.name}" restored`);
+        },
+      });
     } catch {
-      /* toast */
+      /* toast raised by mutation onError */
     }
   };
 

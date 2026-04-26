@@ -8,9 +8,18 @@ interface Props {
   taskTitle: string;
   open: boolean;
   onClose: () => void;
+  /** Called after a successful delete. Receives the deleted task id. */
+  onDeleted?: (id: string) => void;
 }
 
-export function TaskDeleteDialog({ boardId, taskId, taskTitle, open, onClose }: Props) {
+export function TaskDeleteDialog({
+  boardId,
+  taskId,
+  taskTitle,
+  open,
+  onClose,
+  onDeleted,
+}: Props) {
   const { mutate, isPending } = useDeleteTask(boardId);
   return (
     <Dialog
@@ -28,7 +37,14 @@ export function TaskDeleteDialog({ boardId, taskId, taskTitle, open, onClose }: 
           <Button
             variant="danger"
             disabled={isPending}
-            onClick={() => mutate(taskId, { onSuccess: () => onClose() })}
+            onClick={() =>
+              mutate(taskId, {
+                onSuccess: () => {
+                  onDeleted?.(taskId);
+                  onClose();
+                },
+              })
+            }
           >
             Delete
           </Button>

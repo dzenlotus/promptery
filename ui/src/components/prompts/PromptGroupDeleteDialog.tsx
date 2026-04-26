@@ -4,6 +4,7 @@ import { Dialog } from "../ui/Dialog.js";
 import { Button } from "../ui/Button.js";
 import { api } from "../../lib/api.js";
 import { qk } from "../../lib/query.js";
+import { useUndoRedoStore } from "../../store/undoRedo.js";
 import type { PromptGroup } from "../../lib/types.js";
 
 interface Props {
@@ -15,13 +16,38 @@ interface Props {
 
 export function PromptGroupDeleteDialog({ group, open, onOpenChange, onDeleted }: Props) {
   const qc = useQueryClient();
+  const { recordAction } = useUndoRedoStore();
+
   const mutation = useMutation({
     mutationFn: (id: string) => api.promptGroups.delete(id),
-    onSuccess: () => {
+    onSuccess: (_res, _id) => {
       qc.invalidateQueries({ queryKey: qk.promptGroups });
+      const label = group ? `Delete group "${group.name}"` : "Delete group";
       toast.success(group ? `Group "${group.name}" deleted` : "Group deleted");
       onOpenChange(false);
       onDeleted?.();
+
+      if (!group) return;
+
+      // Snapshot before mutation clears the reference.
+      const snapshot = group;
+
+      recordAction({
+        label,
+        do: async () => {
+          await api.promptGroups.delete(snapshot.id);
+          await qc.invalidateQueries({ queryKey: qk.promptGroups });
+        },
+        undo: async () => {
+          const restored = await api.promptGroups.create({
+            name: snapshot.name,
+            color: snapshot.color ?? undefined,
+            prompt_ids: snapshot.member_ids,
+          });
+          await qc.invalidateQueries({ queryKey: qk.promptGroups });
+          toast.success(`Group "${restored.name}" restored`);
+        },
+      });
     },
     onError: (err: Error) => toast.error(err.message || "Failed to delete group"),
   });

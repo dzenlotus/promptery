@@ -19,6 +19,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { Column, Task } from "../../lib/types.js";
 import { qk } from "../../lib/query.js";
 import { useMoveTask } from "../../hooks/useTasks.js";
+import { useUndoRedoStore } from "../../store/undoRedo.js";
+import { api } from "../../lib/api.js";
 import { KanbanColumn } from "./KanbanColumn.js";
 import { TaskCard } from "./TaskCard.js";
 import { AddColumnButton } from "./AddColumnButton.js";
@@ -66,6 +68,7 @@ export function KanbanBoard({ boardId, columns, tasks }: Props) {
   const qc = useQueryClient();
   const moveTask = useMoveTask(boardId);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const { recordAction } = useUndoRedoStore();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } })
@@ -197,6 +200,10 @@ export function KanbanBoard({ boardId, columns, tasks }: Props) {
     const activeT = latest.find((t) => t.id === activeId);
     if (!activeT) return;
 
+    // Capture original position before any cache update for undo.
+    const originalColumnId = activeT.column_id;
+    const originalPosition = activeT.position;
+
     const overTask = latest.find((t) => t.id === overId);
     const overColumn = columns.find((c) => c.id === overId);
     const targetColumnId = overTask?.column_id ?? overColumn?.id ?? activeT.column_id;
@@ -229,6 +236,21 @@ export function KanbanBoard({ boardId, columns, tasks }: Props) {
           : t
       )
     );
+
+    // Only record an undo action when something actually changed.
+    if (targetColumnId !== originalColumnId || newPosition !== originalPosition) {
+      recordAction({
+        label: `Move task "${activeT.title}"`,
+        do: async () => {
+          await api.tasks.move(activeId, targetColumnId, newPosition);
+          await qc.invalidateQueries({ queryKey: qk.tasks(boardId) });
+        },
+        undo: async () => {
+          await api.tasks.move(activeId, originalColumnId, originalPosition);
+          await qc.invalidateQueries({ queryKey: qk.tasks(boardId) });
+        },
+      });
+    }
 
     moveTask.mutate({ id: activeId, columnId: targetColumnId, position: newPosition });
   };
