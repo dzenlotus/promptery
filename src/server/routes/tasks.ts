@@ -214,14 +214,21 @@ tasksRoute.post("/:id/move", zValidator("json", moveTaskSchema), (c) => {
   if (!existing) return c.json({ error: "task not found" }, 404);
   const column = q.getColumn(getDb(), column_id);
   if (!column) return c.json({ error: "column not found" }, 404);
+  // Capture the source location *before* the move so we can publish both
+  // old and new board IDs. UI subscribers viewing the source board need
+  // the old IDs to invalidate their stale list on cross-board moves.
+  const oldBoardId = existing.board_id;
+  const oldColumnId = existing.column_id;
   const moved = q.moveTask(getDb(), id, column_id, position);
   if (!moved) return c.json({ error: "task not found" }, 404);
   bus.publish({
     type: "task.moved",
     data: {
-      boardId: moved.board_id,
       taskId: moved.id,
-      columnId: column_id,
+      oldBoardId,
+      newBoardId: moved.board_id,
+      oldColumnId,
+      newColumnId: column_id,
       position: moved.position,
     },
   });

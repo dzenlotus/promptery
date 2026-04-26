@@ -56,7 +56,14 @@ export type ServerEvent =
     }
   | {
       type: "task.moved";
-      data: { boardId: string; taskId: string; columnId: string; position: number };
+      data: {
+        taskId: string;
+        oldBoardId: string;
+        newBoardId: string;
+        oldColumnId: string;
+        newColumnId: string;
+        position: number;
+      };
     }
   | { type: "task.deleted"; data: { boardId: string; taskId: string } }
   | {

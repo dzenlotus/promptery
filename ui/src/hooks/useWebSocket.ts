@@ -81,13 +81,20 @@ export function useWebSocket(): void {
           qc.setQueryData(qk.task(evt.data.taskId), evt.data.task);
           qc.invalidateQueries({ queryKey: qk.taskContext(evt.data.taskId) });
           break;
-        case "task.moved":
-          qc.invalidateQueries({ queryKey: qk.tasks(evt.data.boardId) });
-          qc.invalidateQueries({ queryKey: qk.task(evt.data.taskId) });
-          break;
         case "task.deleted":
           qc.invalidateQueries({ queryKey: qk.tasks(evt.data.boardId) });
           qc.removeQueries({ queryKey: qk.task(evt.data.taskId) });
+          break;
+        case "task.moved":
+          // Cross-board moves need both source and destination invalidated:
+          // the source board tab must drop the task from its list, the
+          // destination board tab must show it. Same-board moves dedupe
+          // to a single invalidation.
+          qc.invalidateQueries({ queryKey: qk.tasks(evt.data.oldBoardId) });
+          if (evt.data.oldBoardId !== evt.data.newBoardId) {
+            qc.invalidateQueries({ queryKey: qk.tasks(evt.data.newBoardId) });
+          }
+          qc.invalidateQueries({ queryKey: qk.taskContext(evt.data.taskId) });
           break;
         case "task.role_changed":
         case "task.prompt_added":

@@ -3,6 +3,8 @@ import { createApp } from "../index.js";
 import { _setDbForTesting } from "../../db/index.js";
 import { createTestDb, type TestDb } from "../../db/__tests__/helpers/testDb.js";
 import { makeBoard, makeColumn, makeTask } from "../../db/__tests__/helpers/factories.js";
+import { bus } from "../events/bus.js";
+import type { ServerEvent } from "../events/types.js";
 
 /**
  * HTTP integration coverage for cross-board `move_task`. Mirrors the unit
@@ -167,5 +169,95 @@ describe("HTTP API — PATCH /api/tasks/:id preserves board_id invariant", () =>
       .get(task.id) as { column_id: string; board_id: string };
     expect(reloaded.column_id).toBe(col1.id);
     expect(reloaded.board_id).toBe(board1.id);
+  });
+});
+
+/**
+ * The `task.moved` event must carry both source and destination IDs so UI
+ * subscribers viewing the source board can invalidate their list on a
+ * cross-board move (issue #49). Same-board moves still emit both fields,
+ * but old/new IDs are equal — the UI handler dedupes its invalidations.
+ */
+describe("HTTP API — POST /api/tasks/:id/move emits task.moved with old+new IDs", () => {
+  let testDb: TestDb;
+  let app: ReturnType<typeof createApp>["app"];
+  let unsubscribe: (() => void) | null = null;
+
+  beforeEach(() => {
+    testDb = createTestDb();
+    _setDbForTesting(testDb.db);
+    app = createApp().app;
+  });
+
+  afterEach(() => {
+    if (unsubscribe) {
+      unsubscribe();
+      unsubscribe = null;
+    }
+    _setDbForTesting(null);
+    testDb.close();
+  });
+
+  async function move(taskId: string, body: unknown): Promise<Response> {
+    return await app.fetch(
+      new Request(`http://test/api/tasks/${taskId}/move`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+      })
+    );
+  }
+
+  function captureMovedEvents(): ServerEvent[] {
+    const captured: ServerEvent[] = [];
+    unsubscribe = bus.subscribe((evt) => {
+      if (evt.type === "task.moved") captured.push(evt);
+    });
+    return captured;
+  }
+
+  it("emits oldBoardId and newBoardId on cross-board move", async () => {
+    const board1 = makeBoard(testDb.db);
+    const col1 = makeColumn(testDb.db, { board_id: board1.id });
+    const task = makeTask(testDb.db, { column_id: col1.id });
+    const board2 = makeBoard(testDb.db);
+    const col2 = makeColumn(testDb.db, { board_id: board2.id });
+
+    const events = captureMovedEvents();
+    const res = await move(task.id, { column_id: col2.id, position: 5 });
+    expect(res.status).toBe(200);
+
+    expect(events).toHaveLength(1);
+    const evt = events[0]!;
+    expect(evt.type).toBe("task.moved");
+    if (evt.type !== "task.moved") return;
+    expect(evt.data).toMatchObject({
+      taskId: task.id,
+      oldBoardId: board1.id,
+      newBoardId: board2.id,
+      oldColumnId: col1.id,
+      newColumnId: col2.id,
+      position: 5,
+    });
+  });
+
+  it("emits equal old/new boardId on same-board reorder", async () => {
+    const board = makeBoard(testDb.db);
+    const col1 = makeColumn(testDb.db, { board_id: board.id, position: 0 });
+    const col2 = makeColumn(testDb.db, { board_id: board.id, position: 1 });
+    const task = makeTask(testDb.db, { column_id: col1.id });
+
+    const events = captureMovedEvents();
+    const res = await move(task.id, { column_id: col2.id, position: 3 });
+    expect(res.status).toBe(200);
+
+    expect(events).toHaveLength(1);
+    const evt = events[0]!;
+    expect(evt.type).toBe("task.moved");
+    if (evt.type !== "task.moved") return;
+    expect(evt.data.oldBoardId).toBe(board.id);
+    expect(evt.data.newBoardId).toBe(board.id);
+    expect(evt.data.oldColumnId).toBe(col1.id);
+    expect(evt.data.newColumnId).toBe(col2.id);
   });
 });
