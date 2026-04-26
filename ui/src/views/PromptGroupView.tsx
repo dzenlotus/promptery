@@ -165,13 +165,15 @@ export function PromptGroupView() {
     }
   };
 
+  const fromParam = id ? `?from=group:${id}` : "";
+
   const sidebar = (
     <PromptsSidebarList
       prompts={prompts}
       isLoading={false}
       selectedId={null}
       renamingId={null}
-      onSelect={(pid) => setLocation(`/prompts/${pid}`)}
+      onSelect={(pid) => setLocation(`/prompts/${pid}${fromParam}`)}
       onRequestRename={() => setLocation("/prompts")}
       onCommitRename={() => {}}
       onCancelRename={() => {}}
@@ -209,7 +211,7 @@ export function PromptGroupView() {
     return (
       <GroupMainArea
         group={group}
-        onOpenPrompt={(pid) => setLocation(`/prompts/${pid}`)}
+        onOpenPrompt={(pid) => setLocation(`/prompts/${pid}${fromParam}`)}
       />
     );
   })();

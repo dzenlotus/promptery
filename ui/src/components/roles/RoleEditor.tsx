@@ -43,6 +43,8 @@ interface Props {
   onCreatedDraft?: (role: Role) => void;
   /** Lets the parent persist in-progress draft prompt ids across re-renders. */
   onDraftPromptsChange?: (ids: string[]) => void;
+  /** Navigate to a prompt's edit page. */
+  onOpenPrompt?: (id: string) => void;
 }
 
 interface EditorValues {
@@ -74,6 +76,7 @@ export function RoleEditor({
   onSetPrompts,
   onCreatedDraft,
   onDraftPromptsChange,
+  onOpenPrompt,
 }: Props) {
   const isDraft = target.kind === "draft";
   const editorKey = isDraft ? "__draft__" : target.role.id;
@@ -245,6 +248,7 @@ export function RoleEditor({
               allGroups={groups}
               value={localPromptIds}
               onChange={handleReorderPrompts}
+              onOpenPrompt={onOpenPrompt}
               testId="role-default-prompts"
             />
             <p className="text-[11px] text-[var(--color-text-subtle)]">

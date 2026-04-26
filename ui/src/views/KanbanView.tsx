@@ -1,17 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useParams } from "wouter";
+import { useLocation, useParams, useSearch } from "wouter";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { MoreHorizontal, Settings2, Trash2 } from "lucide-react";
 import { useBoards } from "../hooks/useBoards.js";
 import { useColumns } from "../hooks/useColumns.js";
-import { useTasks } from "../hooks/useTasks.js";
+import { useTasks, useTask } from "../hooks/useTasks.js";
 import { useRole } from "../hooks/useRoles.js";
 import { ROUTES } from "../lib/routes.js";
 import { api } from "../lib/api.js";
 import { qk } from "../lib/query.js";
 import { KanbanBoard } from "../components/kanban/KanbanBoard.js";
 import { SpacesList } from "../components/spaces/SpacesList.js";
+import { TaskDialog } from "../components/tasks/TaskDialog.js";
 import { BoardEditDialog } from "../components/boards/BoardEditDialog.js";
 import { BoardDeleteDialog } from "../components/boards/BoardDeleteDialog.js";
 import { AttachmentChipRow } from "../components/common/AttachmentChipRow.js";
@@ -29,6 +30,15 @@ import { PageLayout } from "../layout/PageLayout.js";
 export function KanbanView() {
   const { id: boardId } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
+  const search = useSearch();
+  const openTaskId = new URLSearchParams(search).get("openTask") ?? null;
+  const { data: openTaskData } = useTask(openTaskId);
+  const [autoOpenDismissed, setAutoOpenDismissed] = useState(false);
+  // Reset dismissal whenever the openTask param changes so a new deep-link
+  // always triggers the dialog even if the previous one was dismissed.
+  useEffect(() => {
+    if (openTaskId) setAutoOpenDismissed(false);
+  }, [openTaskId]);
   const { data: boards = [], isLoading: boardsLoading } = useBoards();
   const board = useMemo(() => boards.find((b) => b.id === boardId), [boards, boardId]);
 
@@ -173,5 +183,26 @@ export function KanbanView() {
     </div>
   );
 
-  return <PageLayout sidebarContent={<SpacesList />} mainContent={mainContent} />;
+  // Auto-reopen a task dialog when navigating back from a prompt view
+  // (?openTask=<id> is appended by the "Back to task" button).
+  const autoOpenTask = !autoOpenDismissed && openTaskData ? openTaskData : null;
+
+  return (
+    <>
+      <PageLayout sidebarContent={<SpacesList />} mainContent={mainContent} />
+      {autoOpenTask && boardId && (
+        <TaskDialog
+          mode="edit"
+          boardId={boardId}
+          task={autoOpenTask}
+          open
+          onClose={() => {
+            setAutoOpenDismissed(true);
+            // Strip the ?openTask param so a refresh doesn't re-open it.
+            setLocation(`/board/${boardId}`, { replace: true });
+          }}
+        />
+      )}
+    </>
+  );
 }

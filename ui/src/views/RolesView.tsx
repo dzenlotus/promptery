@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { UserRound } from "lucide-react";
@@ -29,6 +30,7 @@ const makeEmptyDraft = (): RoleDraft => ({
 
 export function RolesView() {
   const qc = useQueryClient();
+  const [, setLocation] = useLocation();
   const { data: allRoles = [], isLoading } = useRoles();
   const { data: allPrompts = [] } = usePrompts();
 
@@ -211,6 +213,9 @@ export function RolesView() {
           onSetPrompts={async (id, ids) => {
             await setPromptsMutation.mutateAsync({ id, promptIds: ids });
           }}
+          onOpenPrompt={(pid) =>
+            setLocation(`/prompts/${pid}?from=role:${selectedRole.id}`)
+          }
         />
       );
     }

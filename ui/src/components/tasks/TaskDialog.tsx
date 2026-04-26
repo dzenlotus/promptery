@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Dialog } from "../ui/Dialog.js";
@@ -64,6 +65,7 @@ function arraysEqual(a: string[], b: string[]): boolean {
 export function TaskDialog(props: Props) {
   const { open, onClose, mode, boardId } = props;
   const qc = useQueryClient();
+  const [, setLocation] = useLocation();
 
   const { data: allPrompts = [] } = usePrompts();
   const { data: allRoles = [] } = useRoles();
@@ -253,6 +255,16 @@ export function TaskDialog(props: Props) {
             directIds={localDirectIds}
             onDirectChange={setLocalDirectIds}
             roleName={selectedRoleName}
+            onOpenPrompt={
+              mode === "edit"
+                ? (pid) => {
+                    onClose();
+                    setLocation(
+                      `/prompts/${pid}?from=task:${props.task.id}`
+                    );
+                  }
+                : undefined
+            }
           />
         </Field>
 

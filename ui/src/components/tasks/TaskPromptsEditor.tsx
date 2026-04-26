@@ -27,6 +27,8 @@ interface Props {
   directIds: string[];
   onDirectChange: (nextIds: string[]) => void;
   roleName?: string | null;
+  /** Navigate to a prompt's edit page. */
+  onOpenPrompt?: (id: string) => void;
   testId?: string;
 }
 
@@ -46,6 +48,7 @@ export function TaskPromptsEditor({
   directIds,
   onDirectChange,
   roleName,
+  onOpenPrompt,
   testId = "task-prompts-editor",
 }: Props) {
   const [addOpen, setAddOpen] = useState(false);
@@ -100,6 +103,8 @@ export function TaskPromptsEditor({
           size="sm"
           inherited
           tooltip={it.short_description ? `${it.short_description} (${inheritedTooltip})` : inheritedTooltip}
+          onClick={onOpenPrompt ? () => onOpenPrompt(it.id) : undefined}
+          className={onOpenPrompt ? "cursor-pointer" : undefined}
           data-testid={`${testId}-inherited-${it.id}`}
         />
       ))}
@@ -115,6 +120,7 @@ export function TaskPromptsEditor({
               key={it.id}
               prompt={it}
               onRemove={() => onDirectChange(directIds.filter((x) => x !== it.id))}
+              onOpen={onOpenPrompt ? () => onOpenPrompt(it.id) : undefined}
               testId={`${testId}-direct-${it.id}`}
             />
           ))}
@@ -195,10 +201,12 @@ export function TaskPromptsEditor({
 function SortableDirectChip({
   prompt,
   onRemove,
+  onOpen,
   testId,
 }: {
   prompt: Prompt;
   onRemove: () => void;
+  onOpen?: () => void;
   testId: string;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -218,6 +226,7 @@ function SortableDirectChip({
       size="sm"
       onRemove={onRemove}
       tooltip={prompt.short_description ?? undefined}
+      onClick={onOpen}
       style={style}
       data-testid={testId}
       {...attributes}

@@ -16,6 +16,8 @@ interface Props {
    *  about. Groups are derived as "fully covered by this list". */
   value: string[];
   onChange: (nextIds: string[]) => void;
+  /** Optional: called when the user clicks a selected prompt chip to open it. */
+  onOpenPrompt?: (id: string) => void;
   label?: string;
   testId?: string;
 }
@@ -46,6 +48,7 @@ export function PromptsMultiSelector({
   allGroups = [],
   value,
   onChange,
+  onOpenPrompt,
   label,
   testId = "prompts-multi-selector",
 }: Props) {
@@ -159,6 +162,8 @@ export function PromptsMultiSelector({
             color={p.color}
             size="sm"
             onRemove={() => togglePrompt(p.id)}
+            onClick={onOpenPrompt ? () => onOpenPrompt(p.id) : undefined}
+            className={onOpenPrompt ? "cursor-pointer" : undefined}
             data-testid={`${testId}-chip-${p.id}`}
           />
         ))}

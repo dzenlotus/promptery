@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { useLocation, useRoute } from "wouter";
+import { useLocation, useRoute, useSearch } from "wouter";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { FileText } from "lucide-react";
+import { ArrowLeft, FileText } from "lucide-react";
 import { PageLayout } from "../layout/PageLayout.js";
 import { PromptsSidebarList } from "../components/prompts/PromptsSidebarList.js";
 import { PromptEditor } from "../components/prompts/PromptEditor.js";
@@ -11,7 +11,61 @@ import { Button } from "../components/ui/Button.js";
 import { api, ApiError } from "../lib/api.js";
 import { qk } from "../lib/query.js";
 import { usePrompts } from "../hooks/usePrompts.js";
+import { usePromptGroups } from "../hooks/usePromptGroups.js";
+import { useRoles } from "../hooks/useRoles.js";
+import { useTask } from "../hooks/useTasks.js";
 import type { Prompt, UpdatePrimitiveInput } from "../lib/types.js";
+
+/** Parses the `?from=<kind>:<id>` breadcrumb param. */
+function parseFromParam(
+  search: string
+): { kind: "group" | "role" | "task"; id: string } | null {
+  const raw = new URLSearchParams(search).get("from");
+  if (!raw) return null;
+  const colon = raw.indexOf(":");
+  if (colon < 1) return null;
+  const kind = raw.slice(0, colon);
+  const id = raw.slice(colon + 1);
+  if (!id) return null;
+  if (kind === "group" || kind === "role" || kind === "task") {
+    return { kind, id };
+  }
+  return null;
+}
+
+/** Resolves display label + target URL for the `?from=` breadcrumb. */
+function useFromContext(
+  from: { kind: "group" | "role" | "task"; id: string } | null
+): { label: string; href: string } | null {
+  const { data: groups = [] } = usePromptGroups();
+  const { data: roles = [] } = useRoles();
+  const { data: task } = useTask(from?.kind === "task" ? from.id : null);
+
+  if (!from) return null;
+
+  if (from.kind === "group") {
+    const group = groups.find((g) => g.id === from.id);
+    if (!group) return null;
+    return { label: group.name, href: `/prompts/groups/${from.id}` };
+  }
+
+  if (from.kind === "role") {
+    const role = roles.find((r) => r.id === from.id);
+    if (!role) return null;
+    return { label: role.name, href: `/roles` };
+  }
+
+  if (from.kind === "task") {
+    if (!task) return null;
+    return {
+      label: `task ${task.slug}`,
+      href: `/board/${task.board_id}?openTask=${from.id}`,
+    };
+  }
+
+  return null;
+}
+
 
 export function PromptsView() {
   const qc = useQueryClient();
@@ -29,6 +83,9 @@ export function PromptsView() {
   // clears. Single optional-param route (`/prompts/:id?`) so the component
   // stays mounted whether the user is on /prompts or /prompts/<id>.
   const [, setLocation] = useLocation();
+  const search = useSearch();
+  const fromParam = parseFromParam(search);
+  const fromCtx = useFromContext(fromParam);
   const [matched, routeParams] = useRoute<{ id?: string }>("/prompts/:id?");
   const routeId = matched ? routeParams?.id ?? null : null;
 
@@ -178,7 +235,26 @@ export function PromptsView() {
             }}
           />
         }
-        mainContent={editor}
+        mainContent={
+          fromCtx ? (
+            <div className="flex flex-col h-full min-h-0">
+              <div className="px-8 pt-4 shrink-0">
+                <button
+                  type="button"
+                  data-testid="prompt-back-button"
+                  onClick={() => setLocation(fromCtx.href)}
+                  className="inline-flex items-center gap-1.5 text-[12px] text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+                >
+                  <ArrowLeft size={13} />
+                  <span>Back to {fromCtx.label}</span>
+                </button>
+              </div>
+              <div className="flex-1 min-h-0">{editor}</div>
+            </div>
+          ) : (
+            editor
+          )
+        }
       />
 
       <Dialog
