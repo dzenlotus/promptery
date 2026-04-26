@@ -1,4 +1,5 @@
 import type { ErrorHandler } from "hono";
+import { HTTPException } from "hono/http-exception";
 import {
   ConflictError,
   ConstraintError,
@@ -31,6 +32,13 @@ export const errorHandler: ErrorHandler = (err, c) => {
 
   if (err instanceof NotFoundError) {
     return c.json({ error: "NotFound", message: err.message, kind: err.kind, id: err.id }, 404);
+  }
+
+  // Hono's own HTTPException carries the intended status code (e.g. 400 for
+  // malformed JSON in a zValidator body). Propagate it verbatim instead of
+  // masking it as 500.
+  if (err instanceof HTTPException) {
+    return c.json({ error: err.message }, err.status);
   }
 
   console.error("[promptery] error:", err);
