@@ -5,44 +5,13 @@ import { toast } from "sonner";
 import { FileText } from "lucide-react";
 import { PageLayout } from "../layout/PageLayout.js";
 import { PromptsSidebarList } from "../components/prompts/PromptsSidebarList.js";
-import {
-  PromptEditor,
-  type PromptDraft,
-} from "../components/prompts/PromptEditor.js";
+import { PromptEditor } from "../components/prompts/PromptEditor.js";
 import { Dialog } from "../components/ui/Dialog.js";
 import { Button } from "../components/ui/Button.js";
-import { DRAFT_COLOR } from "../components/sidebar/colors.js";
 import { api, ApiError } from "../lib/api.js";
 import { qk } from "../lib/query.js";
 import { usePrompts } from "../hooks/usePrompts.js";
 import type { Prompt, UpdatePrimitiveInput } from "../lib/types.js";
-
-const EMPTY_DRAFT: PromptDraft = {
-  kind: "draft",
-  name: "",
-  content: "",
-  color: DRAFT_COLOR,
-};
-
-const DRAFT_NAME_PREFIX = "prompt-draft-";
-
-/** Returns the next available draft name given the current list of prompts. */
-function nextDraftName(prompts: { name: string }[]): string {
-  const used = new Set(
-    prompts
-      .map((p) => p.name)
-      .filter((n) => n.startsWith(DRAFT_NAME_PREFIX))
-      .map((n) => {
-        const num = parseInt(n.slice(DRAFT_NAME_PREFIX.length), 10);
-        return isNaN(num) ? 0 : num;
-      })
-  );
-  let n = 1;
-  while (used.has(n)) n++;
-  return `${DRAFT_NAME_PREFIX}${n}`;
-}
-
-type Selection = { kind: "none" } | { kind: "draft" } | { kind: "saved"; id: string };
 
 export function PromptsView() {
   const qc = useQueryClient();
@@ -57,39 +26,20 @@ export function PromptsView() {
   );
 
   // Route-driven selection — /prompts/:id preselects that prompt, /prompts
-  // clears. This gives us shareable URLs (the group-detail page navigates
-  // here with /prompts/<id>) and survives refresh.
-  // Single optional-param route (`/prompts/:id?`) so the component stays
-  // mounted whether the user is on /prompts or /prompts/<id>. Without this
-  // the plain /prompts route and the /prompts/:id route mounted separate
-  // instances and selection flickered / local state was lost.
+  // clears. Single optional-param route (`/prompts/:id?`) so the component
+  // stays mounted whether the user is on /prompts or /prompts/<id>.
   const [, setLocation] = useLocation();
   const [matched, routeParams] = useRoute<{ id?: string }>("/prompts/:id?");
   const routeId = matched ? routeParams?.id ?? null : null;
 
-  const [selection, setSelection] = useState<Selection>(
-    routeId ? { kind: "saved", id: routeId } : { kind: "none" }
-  );
-  const [hasDraft, setHasDraft] = useState(false);
-  /** Mirrors what the draft PromptEditor currently holds, updated via onValuesChange. */
-  const [draftValues, setDraftValues] = useState<{
-    name: string;
-    content: string;
-    color: string;
-  } | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(routeId);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Prompt | null>(null);
 
   // URL is the source of truth: whenever the route id changes (direct
-  // navigation, back/forward, deep link), reconcile local selection. We
-  // don't clear selection when routeId becomes null because `/prompts`
-  // (no id) is a legitimate "nothing selected" state.
+  // navigation, back/forward, deep link, modal-driven create), reconcile.
   useEffect(() => {
-    if (routeId) {
-      setSelection({ kind: "saved", id: routeId });
-    } else {
-      setSelection((prev) => (prev.kind === "saved" ? { kind: "none" } : prev));
-    }
+    setSelectedId(routeId);
   }, [routeId]);
 
   const invalidate = () => qc.invalidateQueries({ queryKey: qk.prompts });
@@ -102,11 +52,13 @@ export function PromptsView() {
   };
 
   const createMutation = useMutation({
-    mutationFn: (data: { name: string; content: string; color: string; short_description: string | null }) =>
-      api.prompts.create(data),
+    mutationFn: (data: {
+      name: string;
+      content: string;
+      color: string;
+      short_description: string | null;
+    }) => api.prompts.create(data),
     onSuccess: (created) => {
-      // Seed the list so selecting the brand-new prompt doesn't flash the
-      // empty state between create response and the subsequent refetch.
       qc.setQueryData<Prompt[]>(qk.prompts, (old) =>
         old ? [...old, created] : [created]
       );
@@ -128,46 +80,8 @@ export function PromptsView() {
     onError: (err: Error) => toastUnlessField(err, "Failed to delete prompt"),
   });
 
-  // Navigating cleanly reflects the new selection in the URL so the
-  // address bar doesn't lie about which prompt is open.
-  // When navigating away from an active draft, auto-save as a draft prompt
-  // if the user has typed anything (name or content). Empty forms are
-  // discarded silently.
-  const goToSelection = (next: Selection) => {
-    if (selection.kind === "draft" && hasDraft && next.kind !== "draft") {
-      const name = draftValues?.name?.trim() ?? "";
-      const content = draftValues?.content ?? "";
-      const color = draftValues?.color ?? DRAFT_COLOR;
-      if (name.length > 0 || content.trim().length > 0) {
-        // Fire-and-forget: user doesn't wait, and navigation proceeds
-        // immediately. If the save fails we still navigate so the user
-        // isn't trapped. Toast on error.
-        const saveName = name.length > 0 ? name : nextDraftName(prompts);
-        createMutation.mutateAsync({ name: saveName, content, color, short_description: null }).then((created) => {
-          toast.success(`Saved as draft "${created.name}"`);
-        }).catch(() => {
-          // createMutation.onError already toasts; swallow here.
-        });
-      }
-      setHasDraft(false);
-      setDraftValues(null);
-    }
-    setSelection(next);
-    if (next.kind === "saved") {
-      setLocation(`/prompts/${next.id}`);
-    } else if (next.kind === "none") {
-      setLocation("/prompts");
-    }
-    // kind === "draft" stays on /prompts (no saved id yet).
-  };
-
-  const handleCreateDraft = () => {
-    setHasDraft(true);
-    setDraftValues({ name: "", content: "", color: DRAFT_COLOR });
-    goToSelection({ kind: "draft" });
-  };
-
-  const handleSelect = (id: string) => goToSelection({ kind: "saved", id });
+  const goToPrompt = (id: string) => setLocation(`/prompts/${id}`);
+  const clearSelection = () => setLocation("/prompts");
 
   const handleRename = async (id: string, nextName: string) => {
     const trimmed = nextName.trim();
@@ -201,7 +115,7 @@ export function PromptsView() {
         color: current.color,
         short_description: current.short_description ?? null,
       });
-      goToSelection({ kind: "saved", id: dup.id });
+      goToPrompt(dup.id);
     } catch {
       /* toast */
     }
@@ -211,59 +125,37 @@ export function PromptsView() {
     if (!deleteTarget) return;
     try {
       await deleteMutation.mutateAsync(deleteTarget.id);
-      if (selection.kind === "saved" && selection.id === deleteTarget.id) {
-        goToSelection({ kind: "none" });
-      }
+      if (selectedId === deleteTarget.id) clearSelection();
       setDeleteTarget(null);
     } catch {
       /* toast */
     }
   };
 
-  const selectedPrompt =
-    selection.kind === "saved" ? prompts.find((p) => p.id === selection.id) ?? null : null;
+  const selectedPrompt = selectedId
+    ? prompts.find((p) => p.id === selectedId) ?? null
+    : null;
 
-  const editor = (() => {
-    if (selection.kind === "draft" && hasDraft) {
-      return (
-        <PromptEditor
-          target={EMPTY_DRAFT}
-          onCreate={(v) => createMutation.mutateAsync(v)}
-          onUpdate={(id, patch) => updateMutation.mutateAsync({ id, patch })}
-          onCreatedDraft={(p) => {
-            setHasDraft(false);
-            setDraftValues(null);
-            goToSelection({ kind: "saved", id: p.id });
-          }}
-          onValuesChange={setDraftValues}
-        />
-      );
-    }
-    if (selectedPrompt) {
-      return (
-        <PromptEditor
-          target={{ kind: "saved", prompt: selectedPrompt }}
-          onCreate={(v) => createMutation.mutateAsync(v)}
-          onUpdate={(id, patch) => updateMutation.mutateAsync({ id, patch })}
-        />
-      );
-    }
-    return (
-      <div
-        data-testid="prompts-empty-editor"
-        className="h-full grid place-items-center px-8"
-      >
-        <div className="text-center max-w-[320px]">
-          <div className="mx-auto mb-4 h-12 w-12 rounded-full grid place-items-center bg-[var(--hover-overlay)] border border-[var(--color-border)]">
-            <FileText size={20} className="text-[var(--color-text-muted)]" />
-          </div>
-          <p className="text-[13px] text-[var(--color-text-muted)]">
-            Select a prompt or create a new one
-          </p>
+  const editor = selectedPrompt ? (
+    <PromptEditor
+      prompt={selectedPrompt}
+      onUpdate={(id, patch) => updateMutation.mutateAsync({ id, patch })}
+    />
+  ) : (
+    <div
+      data-testid="prompts-empty-editor"
+      className="h-full grid place-items-center px-8"
+    >
+      <div className="text-center max-w-[320px]">
+        <div className="mx-auto mb-4 h-12 w-12 rounded-full grid place-items-center bg-[var(--hover-overlay)] border border-[var(--color-border)]">
+          <FileText size={20} className="text-[var(--color-text-muted)]" />
         </div>
+        <p className="text-[13px] text-[var(--color-text-muted)]">
+          Select a prompt or create a new one
+        </p>
       </div>
-    );
-  })();
+    </div>
+  );
 
   return (
     <>
@@ -272,13 +164,9 @@ export function PromptsView() {
           <PromptsSidebarList
             prompts={prompts}
             isLoading={isLoading}
-            selectedId={selection.kind === "saved" ? selection.id : null}
-            showDraft={hasDraft}
-            draftIsSelected={selection.kind === "draft"}
+            selectedId={selectedId}
             renamingId={renamingId}
-            onSelect={handleSelect}
-            onSelectDraft={() => goToSelection({ kind: "draft" })}
-            onCreateDraft={handleCreateDraft}
+            onSelect={goToPrompt}
             onRequestRename={setRenamingId}
             onCommitRename={handleRename}
             onCancelRename={() => setRenamingId(null)}
@@ -324,7 +212,6 @@ export function PromptsView() {
           that use it.
         </div>
       </Dialog>
-
     </>
   );
 }

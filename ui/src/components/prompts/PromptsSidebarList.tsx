@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { EntityRow } from "../sidebar/EntityRow.js";
-import { DraftRow } from "../sidebar/DraftRow.js";
 import { IconButton } from "../ui/IconButton.js";
 import { SidebarSection } from "../../layout/SidebarSection.js";
 import { PromptGroupsList } from "./PromptGroupsList.js";
 import { PromptGroupDialog } from "./PromptGroupDialog.js";
 import { PromptGroupDeleteDialog } from "./PromptGroupDeleteDialog.js";
+import { PromptCreateDialog } from "./PromptCreateDialog.js";
 import { DraggablePromptRow } from "./DraggablePromptRow.js";
 import { Tooltip } from "../ui/Tooltip.js";
 import type { Prompt, PromptGroup } from "../../lib/types.js";
@@ -15,12 +15,8 @@ interface Props {
   prompts: Prompt[];
   isLoading: boolean;
   selectedId: string | null;
-  showDraft: boolean;
-  draftIsSelected: boolean;
   renamingId: string | null;
   onSelect: (id: string) => void;
-  onSelectDraft: () => void;
-  onCreateDraft: () => void;
   onRequestRename: (id: string) => void;
   onCommitRename: (id: string, name: string) => void;
   onCancelRename: () => void;
@@ -36,12 +32,8 @@ export function PromptsSidebarList({
   prompts,
   isLoading,
   selectedId,
-  showDraft,
-  draftIsSelected,
   renamingId,
   onSelect,
-  onSelectDraft,
-  onCreateDraft,
   onRequestRename,
   onCommitRename,
   onCancelRename,
@@ -50,12 +42,12 @@ export function PromptsSidebarList({
   onDelete,
   draggable = false,
 }: Props) {
-  // Dialog state is hoisted here so the sidebar owns the "groups" sub-section
-  // end-to-end. Pushing it further up into PromptsView would force that view
-  // to know about group-specific UI it doesn't otherwise care about.
+  // Dialog state is hoisted here so the sidebar owns its sub-affordances
+  // (groups + new-prompt) end-to-end. PromptsView doesn't need to know.
   const [groupDialogOpen, setGroupDialogOpen] = useState(false);
   const [editingGroup, setEditingGroup] = useState<PromptGroup | null>(null);
   const [deletingGroup, setDeletingGroup] = useState<PromptGroup | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   return (
     <SidebarSection
@@ -65,7 +57,7 @@ export function PromptsSidebarList({
           label="New prompt"
           size="sm"
           data-testid="prompts-new-button"
-          onClick={onCreateDraft}
+          onClick={() => setCreateOpen(true)}
         >
           <Plus size={14} />
         </IconButton>
@@ -93,7 +85,7 @@ export function PromptsSidebarList({
           <div className="px-3 py-2 text-[12px] text-[var(--color-text-subtle)]">
             Loading…
           </div>
-        ) : prompts.length === 0 && !showDraft ? (
+        ) : prompts.length === 0 ? (
           <div
             data-testid="prompts-empty"
             className="px-3 py-6 text-center text-[12px] text-[var(--color-text-subtle)]"
@@ -101,42 +93,32 @@ export function PromptsSidebarList({
             No prompts yet
           </div>
         ) : (
-          <>
-            {showDraft && (
-              <DraftRow
-                placeholder="New prompt"
-                selected={draftIsSelected}
-                onSelect={onSelectDraft}
-                testId="prompts-draft-row"
-              />
-            )}
-            {prompts.map((p) => {
-              const row = (
-                <Tooltip key={p.id} content={p.short_description ?? ""} side="right">
-                  <EntityRow
-                    item={p}
-                    selected={selectedId === p.id}
-                    isRenaming={renamingId === p.id}
-                    onSelect={() => onSelect(p.id)}
-                    onRequestRename={() => onRequestRename(p.id)}
-                    commitRename={(n) => onCommitRename(p.id, n)}
-                    cancelRename={onCancelRename}
-                    onColorPick={(c) => onColorPick(p.id, c)}
-                    onDuplicate={() => onDuplicate(p.id)}
-                    onDelete={() => onDelete(p.id)}
-                    testIdPrefix="prompt-row"
-                  />
-                </Tooltip>
-              );
-              return draggable ? (
-                <DraggablePromptRow key={p.id} promptId={p.id}>
-                  {row}
-                </DraggablePromptRow>
-              ) : (
-                row
-              );
-            })}
-          </>
+          prompts.map((p) => {
+            const row = (
+              <Tooltip key={p.id} content={p.short_description ?? ""} side="right">
+                <EntityRow
+                  item={p}
+                  selected={selectedId === p.id}
+                  isRenaming={renamingId === p.id}
+                  onSelect={() => onSelect(p.id)}
+                  onRequestRename={() => onRequestRename(p.id)}
+                  commitRename={(n) => onCommitRename(p.id, n)}
+                  cancelRename={onCancelRename}
+                  onColorPick={(c) => onColorPick(p.id, c)}
+                  onDuplicate={() => onDuplicate(p.id)}
+                  onDelete={() => onDelete(p.id)}
+                  testIdPrefix="prompt-row"
+                />
+              </Tooltip>
+            );
+            return draggable ? (
+              <DraggablePromptRow key={p.id} promptId={p.id}>
+                {row}
+              </DraggablePromptRow>
+            ) : (
+              row
+            );
+          })
         )}
       </div>
 
@@ -152,6 +134,10 @@ export function PromptsSidebarList({
         group={deletingGroup}
         open={deletingGroup !== null}
         onOpenChange={(o) => !o && setDeletingGroup(null)}
+      />
+      <PromptCreateDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
       />
     </SidebarSection>
   );

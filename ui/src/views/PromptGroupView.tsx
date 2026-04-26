@@ -170,12 +170,8 @@ export function PromptGroupView() {
       prompts={prompts}
       isLoading={false}
       selectedId={null}
-      showDraft={false}
-      draftIsSelected={false}
       renamingId={null}
       onSelect={(pid) => setLocation(`/prompts/${pid}`)}
-      onSelectDraft={() => setLocation("/prompts")}
-      onCreateDraft={() => setLocation("/prompts")}
       onRequestRename={() => setLocation("/prompts")}
       onCommitRename={() => {}}
       onCancelRename={() => {}}

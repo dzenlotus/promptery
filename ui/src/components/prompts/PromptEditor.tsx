@@ -3,44 +3,18 @@ import { MilkdownEditor } from "../editor/MilkdownEditor.js";
 import { Button } from "../ui/Button.js";
 import { ScrollArea } from "../ui/ScrollArea.js";
 import { HeaderColorPicker } from "../sidebar/HeaderColorPicker.js";
-import { DRAFT_COLOR } from "../sidebar/colors.js";
 import { cn } from "../../lib/cn.js";
 import { relativeTime } from "../../lib/time.js";
 import { ApiError } from "../../lib/api.js";
 import { validateEntityName } from "../../lib/validation.js";
 import type { Prompt } from "../../lib/types.js";
 
-export interface PromptDraft {
-  kind: "draft";
-  name: string;
-  content: string;
-  color: string;
-  short_description?: string | null;
-}
-
-export interface PromptEditable {
-  kind: "saved";
-  prompt: Prompt;
-}
-
-type EditorTarget = PromptDraft | PromptEditable;
-
 interface Props {
-  target: EditorTarget;
-  /** Saving a draft calls this; receives the form values. */
-  onCreate: (values: { name: string; content: string; color: string; short_description: string | null }) => Promise<Prompt>;
+  prompt: Prompt;
   onUpdate: (
     id: string,
     patch: Partial<Pick<Prompt, "name" | "content" | "color" | "short_description">>
   ) => Promise<Prompt>;
-  /** Called after a successful draft create so the view can switch selection. */
-  onCreatedDraft?: (prompt: Prompt) => void;
-  /**
-   * Called whenever the editor's local form values change. Lets parent
-   * components observe draft content without controlling the field — used for
-   * the auto-save-on-navigate-away feature.
-   */
-  onValuesChange?: (values: EditorValues) => void;
 }
 
 interface EditorValues {
@@ -50,14 +24,12 @@ interface EditorValues {
   short_description: string;
 }
 
-function valuesFromTarget(t: EditorTarget): EditorValues {
-  if (t.kind === "draft")
-    return { name: t.name, content: t.content, color: t.color, short_description: t.short_description ?? "" };
+function valuesFromPrompt(p: Prompt): EditorValues {
   return {
-    name: t.prompt.name,
-    content: t.prompt.content,
-    color: t.prompt.color,
-    short_description: t.prompt.short_description ?? "",
+    name: p.name,
+    content: p.content,
+    color: p.color,
+    short_description: p.short_description ?? "",
   };
 }
 
@@ -70,14 +42,16 @@ function valuesEqual(a: EditorValues, b: EditorValues): boolean {
   );
 }
 
-export function PromptEditor({ target, onCreate, onUpdate, onCreatedDraft, onValuesChange }: Props) {
-  const isDraft = target.kind === "draft";
-  // Editor key swaps whenever the underlying target does, which forces the
-  // Milkdown textarea to reset its uncontrolled state so we never see the
-  // previous prompt's text flash into the newly selected one.
-  const editorKey = isDraft ? "__draft__" : target.prompt.id;
+/**
+ * Editor for a saved prompt. Creation lives in `PromptCreateDialog`
+ * (modal, consistent with Boards / Spaces / Tasks); this component only
+ * edits existing rows. The editor key swaps with `prompt.id` so Milkdown's
+ * uncontrolled state resets cleanly when the user navigates between prompts.
+ */
+export function PromptEditor({ prompt, onUpdate }: Props) {
+  const editorKey = prompt.id;
 
-  const initial = useMemo(() => valuesFromTarget(target), [target]);
+  const initial = useMemo(() => valuesFromPrompt(prompt), [prompt]);
   const [values, setValues] = useState<EditorValues>(initial);
   const [saving, setSaving] = useState(false);
   const [hasTyped, setHasTyped] = useState(false);
@@ -92,30 +66,12 @@ export function PromptEditor({ target, onCreate, onUpdate, onCreatedDraft, onVal
     setServerNameError(null);
   }, [initial, editorKey]);
 
-  useEffect(() => {
-    if (isDraft) {
-      requestAnimationFrame(() => nameRef.current?.focus());
-    }
-  }, [isDraft, editorKey]);
-
-  // Notify parent of current values so it can auto-save on navigate-away.
-  // Only relevant in draft mode; the callback is intentionally excluded from
-  // deps so callers can pass an inline arrow without causing loops.
-  useEffect(() => {
-    if (isDraft && onValuesChange) {
-      onValuesChange(values);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDraft, values]);
-
   const isDirty = !valuesEqual(values, initial);
   const localNameError = validateEntityName(values.name);
-  // Show client-side errors as soon as the user starts typing; also surface
-  // them after a Save attempt so an empty form still yields "Name is required".
   const displayedNameError =
     serverNameError ??
     ((hasTyped || attemptedSave) && localNameError ? localNameError : null);
-  const canSave = !saving && !localNameError && (isDraft || isDirty);
+  const canSave = !saving && !localNameError && isDirty;
 
   const onSave = async () => {
     setAttemptedSave(true);
@@ -125,25 +81,15 @@ export function PromptEditor({ target, onCreate, onUpdate, onCreatedDraft, onVal
     try {
       const trimmedName = values.name.trim();
       const trimmedDesc = values.short_description.trim() || null;
-      if (isDraft) {
-        const created = await onCreate({
-          name: trimmedName,
-          content: values.content,
-          color: values.color || DRAFT_COLOR,
-          short_description: trimmedDesc,
-        });
-        onCreatedDraft?.(created);
-      } else {
-        const patch: Partial<Pick<Prompt, "name" | "content" | "color" | "short_description">> = {};
-        if (trimmedName !== target.prompt.name) patch.name = trimmedName;
-        if (values.content !== target.prompt.content) patch.content = values.content;
-        if (values.color !== target.prompt.color) patch.color = values.color;
-        const currentDesc = target.prompt.short_description ?? "";
-        if ((values.short_description.trim() || null) !== (currentDesc.trim() || null))
-          patch.short_description = trimmedDesc;
-        if (Object.keys(patch).length > 0) {
-          await onUpdate(target.prompt.id, patch);
-        }
+      const patch: Partial<Pick<Prompt, "name" | "content" | "color" | "short_description">> = {};
+      if (trimmedName !== prompt.name) patch.name = trimmedName;
+      if (values.content !== prompt.content) patch.content = values.content;
+      if (values.color !== prompt.color) patch.color = values.color;
+      const currentDesc = prompt.short_description ?? "";
+      if ((values.short_description.trim() || null) !== (currentDesc.trim() || null))
+        patch.short_description = trimmedDesc;
+      if (Object.keys(patch).length > 0) {
+        await onUpdate(prompt.id, patch);
       }
     } catch (err) {
       if (err instanceof ApiError && err.field === "name") {
@@ -155,14 +101,11 @@ export function PromptEditor({ target, onCreate, onUpdate, onCreatedDraft, onVal
     }
   };
 
-  const metaText = isDraft
-    ? "Unsaved draft"
-    : `Updated ${relativeTime(target.prompt.updated_at)}`;
+  const metaText = `Updated ${relativeTime(prompt.updated_at)}`;
 
   return (
     <div
       data-testid="prompt-editor"
-      data-draft={isDraft || undefined}
       className="grid grid-rows-[auto_1fr_auto] h-full min-h-0 min-w-0"
     >
       <div className="grid grid-cols-[auto_1fr] items-start gap-3 px-8 pt-6 pb-4 border-b border-[var(--color-border)]">
@@ -265,7 +208,7 @@ export function PromptEditor({ target, onCreate, onUpdate, onCreatedDraft, onVal
             onClick={() => void onSave()}
             disabled={!canSave}
           >
-            {saving ? "Saving…" : !isDraft && !isDirty ? "Saved ✓" : "Save"}
+            {saving ? "Saving…" : !isDirty ? "Saved ✓" : "Save"}
           </Button>
         </div>
       </div>
