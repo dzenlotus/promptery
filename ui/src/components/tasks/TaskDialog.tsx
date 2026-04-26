@@ -260,7 +260,13 @@ export function TaskDialog(props: Props) {
         {/* TODO: MCP tools field — add when MCP tools feature ships */}
 
         <Field label="Description">
-          <MilkdownEditor key={editorKey} value={description} onChange={setDescription} />
+          <MilkdownEditor
+            key={editorKey}
+            value={description}
+            onChange={setDescription}
+            initialMode="view"
+            onSave={() => void submit()}
+          />
         </Field>
 
         {/* Live preview of the inheritance stack. Visible in both modes —
