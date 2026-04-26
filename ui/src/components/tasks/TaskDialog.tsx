@@ -12,6 +12,7 @@ import { TaskEffectiveContext } from "./TaskEffectiveContext.js";
 import { api } from "../../lib/api.js";
 import { qk } from "../../lib/query.js";
 import { usePrompts } from "../../hooks/usePrompts.js";
+import { usePromptGroups } from "../../hooks/usePromptGroups.js";
 import { useRoles, useRole } from "../../hooks/useRoles.js";
 import { useTask } from "../../hooks/useTasks.js";
 import type { Task } from "../../lib/types.js";
@@ -69,6 +70,7 @@ export function TaskDialog(props: Props) {
 
   const { data: allPrompts = [] } = usePrompts();
   const { data: allRoles = [] } = useRoles();
+  const { data: allGroups = [] } = usePromptGroups();
 
   const editingId = mode === "edit" ? props.task.id : undefined;
   const { data: loadedTask } = useTask(editingId);
@@ -251,6 +253,7 @@ export function TaskDialog(props: Props) {
         <Field label="Prompts">
           <TaskPromptsEditor
             allPrompts={allPrompts}
+            allGroups={allGroups}
             inheritedItems={inheritedPrompts}
             directIds={localDirectIds}
             onDirectChange={setLocalDirectIds}

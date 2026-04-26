@@ -1,10 +1,15 @@
 import { useMemo, useState } from "react";
 import { Command } from "cmdk";
-import { Folder, Plus, X } from "lucide-react";
+import { Check, Folder, Plus, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/Popover.js";
 import { Chip } from "../ui/Chip.js";
 import type { Prompt, PromptGroup } from "../../lib/types.js";
 import { cn } from "../../lib/cn.js";
+import {
+  isGroupFullyCovered,
+  memberIds,
+  toggleGroupSelection,
+} from "./promptGroupToggle.js";
 
 interface Props {
   /** All available prompts to pick from. */
@@ -26,23 +31,22 @@ interface Props {
  * Multi-select picker for prompts with optional group shortcuts.
  *
  * - `value` stays as a flat list of prompt ids — backend schema unchanged.
- * - Groups appear as chips only when every one of their members is in
- *   `value`. Unchecking a group chip removes just the ids that belonged
- *   exclusively to that group (i.e. not also covered by another fully-
- *   selected group). Checking a group adds all members at once.
+ *   Picking a group flattens its members into the list immediately, so
+ *   later changes to group membership do NOT propagate to existing role/
+ *   board/column attachments.
+ * - Groups appear in the "Groups" popover section above individual prompts.
+ *   Clicking an unselected group adds every member at once; clicking a
+ *   fully-selected group (highlighted with a check mark) deselects every
+ *   member, except those still covered by another fully-selected group.
+ * - Fully-selected groups also surface as a single chip in the selected
+ *   row so users can see at a glance which collections are attached.
  * - Individual prompts that are part of a fully-selected group are hidden
  *   from both the selected row and the "Add" popover — the group chip
  *   represents them.
  *
- * Used by BoardEditDialog, ColumnEditDialog, and the board create form.
+ * Used by BoardEditDialog, ColumnEditDialog, BoardsList (create form),
+ * and RoleEditor.
  */
-/** Defensive accessor — older backend builds don't populate `member_ids`
- *  in list responses. Treating it as an empty array lets us render without
- *  a runtime crash while the hub catches up. */
-function memberIds(g: PromptGroup): string[] {
-  return g.member_ids ?? [];
-}
-
 export function PromptsMultiSelector({
   allPrompts,
   allGroups = [],
@@ -65,10 +69,7 @@ export function PromptsMultiSelector({
   // AND the group has at least one member. Partially-covered groups stay as
   // individual prompt chips in the selected row.
   const fullySelectedGroups = useMemo(
-    () =>
-      allGroups.filter(
-        (g) => memberIds(g).length > 0 && memberIds(g).every((id) => selectedSet.has(id))
-      ),
+    () => allGroups.filter((g) => isGroupFullyCovered(g, selectedSet)),
     [allGroups, selectedSet]
   );
 
@@ -111,29 +112,7 @@ export function PromptsMultiSelector({
   );
 
   const toggleGroup = (group: PromptGroup) => {
-    const memberSet = new Set(memberIds(group));
-    const fullyCovered = memberIds(group).every((id) => selectedSet.has(id));
-
-    if (fullyCovered) {
-      // Remove only the ids that are NOT also covered by another fully-
-      // selected group — otherwise we'd silently tear down another group's
-      // coverage when the user only meant to unchecked this one.
-      const stillCoveredByOthers = new Set<string>();
-      for (const other of fullySelectedGroups) {
-        if (other.id === group.id) continue;
-        for (const id of memberIds(other)) stillCoveredByOthers.add(id);
-      }
-      onChange(
-        value.filter((id) => !memberSet.has(id) || stillCoveredByOthers.has(id))
-      );
-    } else {
-      // Add every missing member at the end, preserving existing order.
-      const next = [...value];
-      for (const id of memberIds(group)) {
-        if (!selectedSet.has(id)) next.push(id);
-      }
-      onChange(next);
-    }
+    onChange(toggleGroupSelection(group, value, allGroups));
   };
 
   const togglePrompt = (id: string) => {
@@ -211,20 +190,25 @@ export function PromptsMultiSelector({
                         search-reorder calls appendChild(null) and crashes the
                         whole tree on first keystroke. See bug #27. */}
                     <div cmdk-group-items="" className="flex flex-wrap gap-1.5 px-2">
-                      {availableGroups.map((g) => (
-                        <Command.Item
-                          key={g.id}
-                          value={g.id}
-                          keywords={[g.name, "group"]}
-                          onSelect={() => {
-                            toggleGroup(g);
-                            setSearch("");
-                          }}
-                          className="cursor-pointer rounded-full outline-none [&[data-selected=true]>span]:bg-[var(--active-overlay)]"
-                        >
-                          <GroupPickChip group={g} />
-                        </Command.Item>
-                      ))}
+                      {availableGroups.map((g) => {
+                        const covered = isGroupFullyCovered(g, selectedSet);
+                        return (
+                          <Command.Item
+                            key={g.id}
+                            value={g.id}
+                            keywords={[g.name, "group"]}
+                            onSelect={() => {
+                              toggleGroup(g);
+                              setSearch("");
+                            }}
+                            data-fully-selected={covered || undefined}
+                            data-testid={`${testId}-group-pick-${g.id}`}
+                            className="cursor-pointer rounded-full outline-none [&[data-selected=true]>span]:bg-[var(--active-overlay)]"
+                          >
+                            <GroupPickChip group={g} selected={covered} />
+                          </Command.Item>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -323,19 +307,35 @@ function GroupChip({
   );
 }
 
-/** Non-interactive chip used inside the popover grid. */
-function GroupPickChip({ group }: { group: PromptGroup }) {
+/** Non-interactive chip used inside the popover grid. The `selected` flag
+ *  highlights groups whose members are already fully selected — clicking
+ *  them again deselects every member at once. */
+function GroupPickChip({
+  group,
+  selected,
+}: {
+  group: PromptGroup;
+  selected?: boolean;
+}) {
   const tint = group.color || "#7a746a";
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1 h-5 px-1.5 rounded-full text-[11px]",
-        "bg-[var(--hover-overlay)] text-[var(--color-text)]",
-        "border tracking-tight whitespace-nowrap shrink-0"
+        "border tracking-tight whitespace-nowrap shrink-0",
+        selected
+          ? "bg-[var(--active-overlay)] text-[var(--color-text)]"
+          : "bg-[var(--hover-overlay)] text-[var(--color-text)]"
       )}
-      style={{ borderColor: `${tint}55` }}
+      style={{
+        borderColor: selected ? tint : `${tint}55`,
+      }}
     >
-      <Folder size={11} style={{ color: tint }} />
+      {selected ? (
+        <Check size={11} style={{ color: tint }} />
+      ) : (
+        <Folder size={11} style={{ color: tint }} />
+      )}
       <span className="truncate">{group.name}</span>
       <span className="text-[var(--color-text-subtle)] tabular-nums">
         ·{memberIds(group).length}

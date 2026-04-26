@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Command } from "cmdk";
-import { Plus } from "lucide-react";
+import { Check, Folder, Plus } from "lucide-react";
 import {
   DndContext,
   PointerSensor,
@@ -19,10 +19,19 @@ import { CSS } from "@dnd-kit/utilities";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/Popover.js";
 import { Chip } from "../ui/Chip.js";
 import { cn } from "../../lib/cn.js";
-import type { Prompt } from "../../lib/types.js";
+import type { Prompt, PromptGroup } from "../../lib/types.js";
+import {
+  isGroupFullyCovered,
+  memberIds,
+  toggleGroupSelection,
+} from "../common/promptGroupToggle.js";
 
 interface Props {
   allPrompts: Prompt[];
+  /** Optional list of prompt groups. When provided, the picker renders a
+   *  "Groups" section above the prompts list — clicking a group flattens
+   *  its members into the direct list (group itself is never stored). */
+  allGroups?: PromptGroup[];
   inheritedItems: Prompt[];
   directIds: string[];
   onDirectChange: (nextIds: string[]) => void;
@@ -44,6 +53,7 @@ interface Props {
  */
 export function TaskPromptsEditor({
   allPrompts,
+  allGroups = [],
   inheritedItems,
   directIds,
   onDirectChange,
@@ -75,6 +85,28 @@ export function TaskPromptsEditor({
       ),
     [allPrompts, directSet, inheritedSet]
   );
+
+  // Only non-empty groups appear in the picker. Groups whose members are
+  // entirely inherited from the role would be no-ops; we still surface them
+  // so the user can see the option, but the toggle logic below will keep
+  // the inherited ids out of `directIds` (they're already provided).
+  const availableGroups = useMemo(
+    () => allGroups.filter((g) => memberIds(g).length > 0),
+    [allGroups]
+  );
+
+  const toggleGroup = (group: PromptGroup) => {
+    // Filter members so we never push an inherited id into the direct list —
+    // it would create a phantom duplicate when the resolver flattens.
+    const filteredMembers = memberIds(group).filter(
+      (id) => !inheritedSet.has(id)
+    );
+    if (filteredMembers.length === 0) return;
+    const filteredGroup: PromptGroup = { ...group, member_ids: filteredMembers };
+    onDirectChange(
+      toggleGroupSelection(filteredGroup, directIds, [filteredGroup])
+    );
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
@@ -153,48 +185,143 @@ export function TaskPromptsEditor({
               <Command.Input
                 value={search}
                 onValueChange={setSearch}
-                placeholder="Search prompts…"
+                placeholder={
+                  availableGroups.length > 0
+                    ? "Search groups or prompts…"
+                    : "Search prompts…"
+                }
                 className="w-full h-9 bg-transparent outline-none text-[13px] placeholder:text-[var(--color-text-subtle)]"
               />
             </div>
             <Command.List className="max-h-[280px] overflow-y-auto scroll-thin">
-              {/* cmdk-group-items attr is load-bearing — see bug #27.
-                  Without it the search-reorder calls appendChild(null) on
-                  first keystroke because cmdk can't find a group wrapper and
-                  its fallback selector returns null on our custom wrapper. */}
-              <div cmdk-group-items="" className="flex flex-wrap items-start gap-1.5 p-2">
-                <Command.Empty className="w-full px-1 py-2 text-[12px] text-[var(--color-text-subtle)]">
-                  {allPrompts.length === 0
-                    ? "No prompts yet. Create some in the Prompts view."
-                    : availableToAdd.length === 0
-                      ? "All available prompts already added"
-                      : "No matches"}
-                </Command.Empty>
-                {availableToAdd.map((it) => (
-                  <Command.Item
-                    key={it.id}
-                    value={it.id}
-                    keywords={[it.name]}
-                    onSelect={() => {
-                      onDirectChange([...directIds, it.id]);
-                      setAddOpen(false);
-                      setSearch("");
-                    }}
-                    className={cn(
-                      "inline-flex items-center rounded-full cursor-pointer outline-none p-[2px]",
-                      "transition-colors",
-                      "data-[selected=true]:bg-[var(--hover-overlay)]"
-                    )}
-                  >
-                    <Chip name={it.name} color={it.color} size="sm" tooltip={it.short_description ?? undefined} />
-                  </Command.Item>
-                ))}
-              </div>
+              <Command.Empty className="w-full px-3 py-3 text-[12px] text-[var(--color-text-subtle)]">
+                {allPrompts.length === 0
+                  ? "No prompts yet. Create some in the Prompts view."
+                  : availableToAdd.length === 0 && availableGroups.length === 0
+                    ? "All available prompts already added"
+                    : "No matches"}
+              </Command.Empty>
+
+              {availableGroups.length > 0 && (
+                <div className="pt-1 pb-2">
+                  <div className="px-3 pb-1 text-[10px] uppercase tracking-[0.1em] text-[var(--color-text-subtle)]">
+                    Groups
+                  </div>
+                  {/* cmdk-group-items attr is load-bearing — see bug #27. */}
+                  <div cmdk-group-items="" className="flex flex-wrap gap-1.5 px-2">
+                    {availableGroups.map((g) => {
+                      // Cover-state derived from `directIds` only (inherited
+                      // ids never live in the direct list). A group whose
+                      // members are entirely inherited reads as "uncovered"
+                      // here — toggling it would still be a no-op via the
+                      // filter inside `toggleGroup`.
+                      const filteredMembers = memberIds(g).filter(
+                        (id) => !inheritedSet.has(id)
+                      );
+                      const covered =
+                        filteredMembers.length > 0 &&
+                        filteredMembers.every((id) => directSet.has(id));
+                      return (
+                        <Command.Item
+                          key={g.id}
+                          value={g.id}
+                          keywords={[g.name, "group"]}
+                          onSelect={() => {
+                            toggleGroup(g);
+                            setSearch("");
+                          }}
+                          data-fully-selected={covered || undefined}
+                          data-testid={`${testId}-group-pick-${g.id}`}
+                          className="cursor-pointer rounded-full outline-none [&[data-selected=true]>span]:bg-[var(--active-overlay)]"
+                        >
+                          <GroupPickChip group={g} selected={covered} />
+                        </Command.Item>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {availableGroups.length > 0 && availableToAdd.length > 0 && (
+                <div
+                  aria-hidden
+                  className="mx-2 my-1 h-px bg-[var(--color-border)]"
+                />
+              )}
+
+              {availableToAdd.length > 0 && (
+                <div className="pt-1 pb-2">
+                  {availableGroups.length > 0 && (
+                    <div className="px-3 pb-1 text-[10px] uppercase tracking-[0.1em] text-[var(--color-text-subtle)]">
+                      Prompts
+                    </div>
+                  )}
+                  <div cmdk-group-items="" className="flex flex-wrap items-start gap-1.5 p-2">
+                    {availableToAdd.map((it) => (
+                      <Command.Item
+                        key={it.id}
+                        value={it.id}
+                        keywords={[it.name]}
+                        onSelect={() => {
+                          onDirectChange([...directIds, it.id]);
+                          setAddOpen(false);
+                          setSearch("");
+                        }}
+                        className={cn(
+                          "inline-flex items-center rounded-full cursor-pointer outline-none p-[2px]",
+                          "transition-colors",
+                          "data-[selected=true]:bg-[var(--hover-overlay)]"
+                        )}
+                      >
+                        <Chip name={it.name} color={it.color} size="sm" tooltip={it.short_description ?? undefined} />
+                      </Command.Item>
+                    ))}
+                  </div>
+                </div>
+              )}
             </Command.List>
           </Command>
         </PopoverContent>
       </Popover>
     </div>
+  );
+}
+
+/** Non-interactive chip used inside the Groups section of the popover.
+ *  Mirrors `PromptsMultiSelector`'s GroupPickChip so the visual contract is
+ *  the same across every prompt picker — folder icon when uncovered, check
+ *  mark when fully covered. */
+function GroupPickChip({
+  group,
+  selected,
+}: {
+  group: PromptGroup;
+  selected?: boolean;
+}) {
+  const tint = group.color || "#7a746a";
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 h-5 px-1.5 rounded-full text-[11px]",
+        "border tracking-tight whitespace-nowrap shrink-0",
+        selected
+          ? "bg-[var(--active-overlay)] text-[var(--color-text)]"
+          : "bg-[var(--hover-overlay)] text-[var(--color-text)]"
+      )}
+      style={{
+        borderColor: selected ? tint : `${tint}55`,
+      }}
+    >
+      {selected ? (
+        <Check size={11} style={{ color: tint }} />
+      ) : (
+        <Folder size={11} style={{ color: tint }} />
+      )}
+      <span className="truncate">{group.name}</span>
+      <span className="text-[var(--color-text-subtle)] tabular-nums">
+        ·{memberIds(group).length}
+      </span>
+    </span>
   );
 }
 
