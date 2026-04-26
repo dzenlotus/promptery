@@ -32,7 +32,13 @@ interface PromptRow {
   content: string;
   color: string | null;
   short_description: string | null;
+  /** Join-table position used for within-origin ordering. */
+  position: number;
 }
+
+/** Internal type that carries position through dedup so the final sort can
+ * use (specificity desc, position asc, name asc). Stripped before returning. */
+type CollectedPrompt = ResolvedPrompt & { _position: number };
 
 /**
  * Resolve the full effective context for a task.
@@ -92,19 +98,19 @@ function resolvePrompts(
   task: TaskJoinRow,
   activeRole: ResolvedRole | null
 ): ResolvedPrompt[] {
-  const collected: ResolvedPrompt[] = [];
+  const collected: CollectedPrompt[] = [];
 
   // 1. Direct on the task.
   const directPrompts = db
     .prepare(
-      `SELECT p.id, p.name, p.content, p.color, p.short_description
+      `SELECT p.id, p.name, p.content, p.color, p.short_description, tp.position
        FROM task_prompts tp
        JOIN prompts p ON p.id = tp.prompt_id
        WHERE tp.task_id = ? AND tp.origin = 'direct'
        ORDER BY tp.position ASC, p.name ASC`
     )
     .all(task.id) as PromptRow[];
-  for (const p of directPrompts) collected.push({ ...p, origin: "direct" });
+  for (const p of directPrompts) collected.push({ ...p, origin: "direct", _position: p.position });
 
   // 2. Active role's prompts (whichever layer it came from — source tells us).
   if (activeRole) {
@@ -125,6 +131,7 @@ function resolvePrompts(
         ...p,
         origin,
         source: { type: sourceType, id: activeRole.id, name: activeRole.name },
+        _position: p.position,
       });
     }
   }
@@ -132,7 +139,7 @@ function resolvePrompts(
   // 3. Direct prompts on the column.
   const columnPrompts = db
     .prepare(
-      `SELECT p.id, p.name, p.content, p.color, p.short_description
+      `SELECT p.id, p.name, p.content, p.color, p.short_description, cp.position
        FROM column_prompts cp
        JOIN prompts p ON p.id = cp.prompt_id
        WHERE cp.column_id = ?
@@ -144,6 +151,7 @@ function resolvePrompts(
       ...p,
       origin: "column",
       source: { type: "column", id: task.column_id, name: task.column_name },
+      _position: p.position,
     });
   }
 
@@ -160,6 +168,7 @@ function resolvePrompts(
           ...p,
           origin: "column-role",
           source: { type: "column-role", id: colRole.id, name: colRole.name },
+          _position: p.position,
         });
       }
     }
@@ -168,7 +177,7 @@ function resolvePrompts(
   // 5. Direct prompts on the board.
   const boardPrompts = db
     .prepare(
-      `SELECT p.id, p.name, p.content, p.color, p.short_description
+      `SELECT p.id, p.name, p.content, p.color, p.short_description, bp.position
        FROM board_prompts bp
        JOIN prompts p ON p.id = bp.prompt_id
        WHERE bp.board_id = ?
@@ -180,6 +189,7 @@ function resolvePrompts(
       ...p,
       origin: "board",
       source: { type: "board", id: task.board_id, name: task.board_name },
+      _position: p.position,
     });
   }
 
@@ -198,13 +208,14 @@ function resolvePrompts(
           ...p,
           origin: "board-role",
           source: { type: "board-role", id: boardRole.id, name: boardRole.name },
+          _position: p.position,
         });
       }
     }
   }
 
   // Dedup: keep the most-specific origin per prompt id.
-  const byId = new Map<string, ResolvedPrompt>();
+  const byId = new Map<string, CollectedPrompt>();
   for (const p of collected) {
     const existing = byId.get(p.id);
     if (!existing || ORIGIN_SPECIFICITY[p.origin] > ORIGIN_SPECIFICITY[existing.origin]) {
@@ -212,11 +223,18 @@ function resolvePrompts(
     }
   }
 
-  return Array.from(byId.values()).sort((a, b) => {
-    const specDiff = ORIGIN_SPECIFICITY[b.origin] - ORIGIN_SPECIFICITY[a.origin];
-    if (specDiff !== 0) return specDiff;
-    return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
-  });
+  // Sort: specificity desc (direct first), then position asc, then name asc
+  // as a deterministic tiebreaker. Position comes from the join-table column
+  // that tracks per-attachment ordering within each origin layer.
+  return Array.from(byId.values())
+    .sort((a, b) => {
+      const specDiff = ORIGIN_SPECIFICITY[b.origin] - ORIGIN_SPECIFICITY[a.origin];
+      if (specDiff !== 0) return specDiff;
+      const posDiff = a._position - b._position;
+      if (posDiff !== 0) return posDiff;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
+    })
+    .map(({ _position: _pos, ...rest }) => rest);
 }
 
 function fetchRoleRow(db: Database, id: string): RoleRow | null {
@@ -229,7 +247,7 @@ function fetchRoleRow(db: Database, id: string): RoleRow | null {
 function selectRolePrompts(db: Database, roleId: string): PromptRow[] {
   return db
     .prepare(
-      `SELECT p.id, p.name, p.content, p.color, p.short_description
+      `SELECT p.id, p.name, p.content, p.color, p.short_description, rp.position
        FROM role_prompts rp
        JOIN prompts p ON p.id = rp.prompt_id
        WHERE rp.role_id = ?

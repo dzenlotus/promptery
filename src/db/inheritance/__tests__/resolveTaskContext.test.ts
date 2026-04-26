@@ -183,4 +183,30 @@ describe("resolveTaskContext — prompt union", () => {
   it("returns null for an unknown task id", () => {
     expect(resolveTaskContext(db, "nope")).toBeNull();
   });
+
+  it("sorts role prompts by position, not alphabetically", () => {
+    // Attach 3 prompts to a role in positions [2, 0, 1].
+    // Alphabetical order would be: alpha, bravo, charlie.
+    // Position order should be: bravo (pos 0), charlie (pos 1), alpha (pos 2).
+    const b = createBoard(db, "B");
+    const col = firstColumnId(db, b.id);
+    const t = createTask(db, b.id, col, { title: "T" });
+    const r = createRole(db, { name: "R" });
+
+    const pAlpha = createPrompt(db, { name: "alpha" });
+    const pBravo = createPrompt(db, { name: "bravo" });
+    const pCharlie = createPrompt(db, { name: "charlie" });
+
+    // setRolePrompts uses array index as position, so:
+    //   index 0 → bravo (position 0)
+    //   index 1 → charlie (position 1)
+    //   index 2 → alpha (position 2)
+    setRolePrompts(db, r.id, [pBravo.id, pCharlie.id, pAlpha.id]);
+    setTaskRole(db, t.id, r.id);
+
+    const ctx = resolveTaskContext(db, t.id);
+    const names = ctx!.prompts.map((p) => p.name);
+    // Expected: position order [bravo, charlie, alpha], not alphabetical [alpha, bravo, charlie].
+    expect(names).toEqual(["bravo", "charlie", "alpha"]);
+  });
 });
