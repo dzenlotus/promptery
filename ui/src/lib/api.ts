@@ -155,6 +155,11 @@ export const api = {
     update: (id: string, patch: { name?: string; position?: number }) =>
       request<Column>(`/api/columns/${id}`, { method: "PATCH", body: json(patch) }),
     delete: (id: string) => request<{ ok: true }>(`/api/columns/${id}`, { method: "DELETE" }),
+    reorder: (boardId: string, columnIds: string[]) =>
+      request<Column[]>(`/api/boards/${boardId}/columns/order`, {
+        method: "PATCH",
+        body: json({ columnIds }),
+      }),
     setRole: (id: string, roleId: string | null) =>
       request<Column>(`/api/columns/${id}/role`, {
         method: "PUT",

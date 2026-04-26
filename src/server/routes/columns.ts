@@ -5,6 +5,7 @@ import * as q from "../../db/queries/index.js";
 import { ColumnNotEmptyError } from "../../db/queries/errors.js";
 import {
   createColumnSchema,
+  reorderColumnsSchema,
   setColumnPromptsSchema,
   setColumnRoleSchema,
   updateColumnSchema,
@@ -33,6 +34,38 @@ boardColumnsRoute.post("/:boardId/columns", zValidator("json", createColumnSchem
   const column = q.createColumn(getDb(), boardId, name);
   bus.publish({ type: "column.created", data: { boardId, column } });
   return c.json(column, 201);
+});
+
+/**
+ * Bulk reorder columns for a board.
+ *
+ * Accepts the full ordered list of column IDs and rewrites positions in a
+ * single BEGIN/COMMIT transaction. Any column ID not belonging to this board
+ * is silently ignored (its position row just doesn't match).
+ *
+ * Emits a single `column.reordered` WS event instead of N `column.updated`
+ * events to keep chat bandwidth low.
+ *
+ * Rebalance note: this endpoint always writes integer positions (1, 2, 3…),
+ * which resets any fractional positions accumulated by midpoint insertion.
+ * This acts as the periodic rebalance: every explicit reorder resets the
+ * scale rather than waiting for a depth trigger.
+ */
+boardColumnsRoute.patch("/:boardId/columns/order", zValidator("json", reorderColumnsSchema), (c) => {
+  const boardId = c.req.param("boardId");
+  if (!q.getBoard(getDb(), boardId)) return c.json({ error: "board not found" }, 404);
+  const { columnIds } = c.req.valid("json");
+  // Validate all IDs belong to this board.
+  for (const id of columnIds) {
+    const col = q.getColumn(getDb(), id);
+    if (!col) return c.json({ error: `column not found: ${id}` }, 404);
+    if (col.board_id !== boardId) {
+      return c.json({ error: `column ${id} does not belong to board ${boardId}` }, 400);
+    }
+  }
+  const columns = q.reorderColumns(getDb(), boardId, columnIds);
+  bus.publish({ type: "column.reordered", data: { boardId, columnIds } });
+  return c.json(columns);
 });
 
 export const columnsRoute = new Hono();

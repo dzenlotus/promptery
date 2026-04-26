@@ -6,7 +6,8 @@ export const createColumnSchema = z.object({
 
 export const updateColumnSchema = z.object({
   name: z.string().min(1).max(50).optional(),
-  position: z.number().int().min(0).optional(),
+  // Float allowed — midpoint positions from drag-and-drop reordering.
+  position: z.number().min(0).optional(),
 });
 
 export const setColumnRoleSchema = z.object({
@@ -15,4 +16,8 @@ export const setColumnRoleSchema = z.object({
 
 export const setColumnPromptsSchema = z.object({
   prompt_ids: z.array(z.string().min(1)),
+});
+
+export const reorderColumnsSchema = z.object({
+  columnIds: z.array(z.string().min(1)).min(1),
 });

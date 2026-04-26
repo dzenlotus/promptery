@@ -303,6 +303,10 @@ export type ServerEvent =
       type: "column.prompts_changed";
       data: { boardId: string; columnId: string; prompts: Prompt[] };
     }
+  | {
+      type: "column.reordered";
+      data: { boardId: string; columnIds: string[] };
+    }
   | { type: "task.created"; data: { boardId: string; task: Task } }
   | { type: "task.updated"; data: { boardId: string; taskId: string; task: Task } }
   | {

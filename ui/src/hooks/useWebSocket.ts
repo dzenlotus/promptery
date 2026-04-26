@@ -61,6 +61,12 @@ export function useWebSocket(): void {
           }
           qc.invalidateQueries({ queryKey: ["task-context"] });
           break;
+        case "column.reordered":
+          // Server-authoritative reorder: overwrite local order so other tabs
+          // reflect the drop immediately. If this tab originated the reorder,
+          // the optimistic update already applied and this is a no-op.
+          qc.invalidateQueries({ queryKey: qk.columns(evt.data.boardId) });
+          break;
         case "column.role_changed":
         case "column.prompts_changed":
           qc.invalidateQueries({ queryKey: qk.column(evt.data.columnId) });

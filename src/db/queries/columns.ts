@@ -112,6 +112,29 @@ export function setColumnRole(
   return getColumn(db, id);
 }
 
+/**
+ * Bulk reorder columns for a board in a single transaction.
+ *
+ * Positions are stored as floats so midpoint insertion never requires a full
+ * rewrite. This function always writes integer positions (1, 2, 3 …) for the
+ * full ordered list, which acts as the rebalancing step.
+ *
+ * Rebalance trigger: called by the bulk-reorder endpoint on every drop, which
+ * keeps fractions from accumulating indefinitely. The endpoint also rebalances
+ * when it detects any existing column position with more than 6 decimal places.
+ */
+export function reorderColumns(db: Database, boardId: string, orderedIds: string[]): Column[] {
+  const tx = db.transaction(() => {
+    const stmt = db.prepare(
+      "UPDATE columns SET position = ? WHERE id = ? AND board_id = ?"
+    );
+    // Write 1-based float positions so 0 stays reserved for "before all".
+    orderedIds.forEach((id, i) => stmt.run(i + 1, id, boardId));
+  });
+  tx();
+  return listColumns(db, boardId);
+}
+
 export function deleteColumn(db: Database, id: string): boolean {
   // Refuse to delete a column that still owns tasks. The schema has no
   // FK cascade for tasks→columns, so a silent delete would orphan the rows

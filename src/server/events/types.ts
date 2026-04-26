@@ -49,6 +49,10 @@ export type ServerEvent =
       type: "column.prompts_changed";
       data: { boardId: string; columnId: string; prompts: Prompt[] };
     }
+  | {
+      type: "column.reordered";
+      data: { boardId: string; columnIds: string[] };
+    }
   | { type: "task.created"; data: { boardId: string; task: TaskWithRelations } }
   | {
       type: "task.updated";

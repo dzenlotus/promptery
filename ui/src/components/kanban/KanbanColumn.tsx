@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRole } from "../../hooks/useRoles.js";
 import { useDroppable } from "@dnd-kit/core";
@@ -22,9 +22,11 @@ interface Props {
   boardId: string;
   column: Column;
   tasks: Task[];
+  /** Optional drag handle rendered at the left of the column header row. */
+  dragHandle?: ReactNode;
 }
 
-export function KanbanColumn({ boardId, column, tasks }: Props) {
+export function KanbanColumn({ boardId, column, tasks, dragHandle }: Props) {
   const [createOpen, setCreateOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -61,11 +63,12 @@ export function KanbanColumn({ boardId, column, tasks }: Props) {
     <div
       data-testid={`kanban-column-${column.id}`}
       data-column-name={column.name}
-      className="grid grid-rows-[auto_1fr] gap-3 h-full min-h-0 rounded-xl p-3 border border-[var(--color-border)] bg-transparent"
+      className="group/col grid grid-rows-[auto_1fr] gap-3 h-full min-h-0 rounded-xl p-3 border border-[var(--color-border)] bg-transparent"
     >
       <div className="grid gap-1.5">
-        <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
-          <div className="flex items-baseline gap-2 min-w-0">
+        <div className="flex items-center gap-2">
+          {dragHandle ?? null}
+          <div className="flex items-baseline gap-2 min-w-0 flex-1">
             <h3 className="text-[13px] font-medium tracking-tight truncate text-[var(--color-text-muted)]">
               {column.name}
             </h3>
@@ -78,7 +81,7 @@ export function KanbanColumn({ boardId, column, tasks }: Props) {
             <span
               data-testid={`column-role-chip-${column.id}`}
               title={`Column role: ${role.name}`}
-              className="justify-self-center min-w-0 inline-flex items-center gap-1 h-5 px-1.5 rounded-full text-[10px] bg-[var(--hover-overlay)] text-[var(--color-text-muted)] border border-[var(--color-border)]"
+              className="min-w-0 inline-flex items-center gap-1 h-5 px-1.5 rounded-full text-[10px] bg-[var(--hover-overlay)] text-[var(--color-text-muted)] border border-[var(--color-border)]"
             >
               <span
                 aria-hidden
@@ -87,11 +90,9 @@ export function KanbanColumn({ boardId, column, tasks }: Props) {
               />
               <span className="truncate">{role.name}</span>
             </span>
-          ) : (
-            <span />
-          )}
+          ) : null}
 
-          <div className="flex items-center gap-0.5">
+          <div className="flex items-center gap-0.5 shrink-0">
             <IconButton label="Add task" size="sm" onClick={() => setCreateOpen(true)}>
               <Plus size={14} />
             </IconButton>
