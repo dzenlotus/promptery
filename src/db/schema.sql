@@ -240,3 +240,18 @@ CREATE TRIGGER IF NOT EXISTS tasks_fts_delete
 AFTER DELETE ON tasks BEGIN
   DELETE FROM tasks_fts WHERE task_id = old.id;
 END;
+
+-- Task activity log: append-only timeline of mutations per task. Each row
+-- captures the mutation type, optional actor (e.g. bridge agent_hint), and
+-- a JSON blob with type-specific details. Cascades with the task.
+CREATE TABLE IF NOT EXISTS task_events (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,
+  actor TEXT,
+  details_json TEXT,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_events_task_created
+  ON task_events(task_id, created_at DESC);

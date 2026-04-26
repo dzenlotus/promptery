@@ -4,14 +4,20 @@
  *
  * Surfaces non-2xx responses as real Error objects carrying the server's
  * error body; the MCP handler wraps them as tool errors.
+ *
+ * The optional `agentHint` is captured at register time and forwarded as
+ * `x-promptery-actor` on every mutating request — that's what the activity
+ * log uses to attribute which agent moved/edited which task.
  */
 export class HubClient {
   private bridgeId: string | null = null;
   private heartbeatTimer: NodeJS.Timeout | null = null;
+  private agentHint: string | null = null;
 
   constructor(public readonly baseUrl: string) {}
 
   async register(agentHint?: string | null, roleIds?: string[]): Promise<void> {
+    this.agentHint = agentHint ?? null;
     const res = await this.post<{ id: string }>("/api/bridges/register", {
       pid: process.pid,
       agent_hint: agentHint ?? null,
@@ -42,14 +48,14 @@ export class HubClient {
   }
 
   async get<T>(path: string): Promise<T> {
-    const res = await fetch(this.url(path), { headers: this.bridgeHeaders() });
+    const res = await fetch(this.url(path), { headers: this.headers() });
     return this.parseJson<T>(res, "GET", path);
   }
 
   async post<T>(path: string, body: unknown): Promise<T> {
     const res = await fetch(this.url(path), {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...this.bridgeHeaders() },
+      headers: this.headers({ "Content-Type": "application/json" }),
       body: JSON.stringify(body),
     });
     return this.parseJson<T>(res, "POST", path);
@@ -58,7 +64,7 @@ export class HubClient {
   async patch<T>(path: string, body: unknown): Promise<T> {
     const res = await fetch(this.url(path), {
       method: "PATCH",
-      headers: { "Content-Type": "application/json", ...this.bridgeHeaders() },
+      headers: this.headers({ "Content-Type": "application/json" }),
       body: JSON.stringify(body),
     });
     return this.parseJson<T>(res, "PATCH", path);
@@ -67,7 +73,7 @@ export class HubClient {
   async put<T>(path: string, body: unknown): Promise<T> {
     const res = await fetch(this.url(path), {
       method: "PUT",
-      headers: { "Content-Type": "application/json", ...this.bridgeHeaders() },
+      headers: this.headers({ "Content-Type": "application/json" }),
       body: JSON.stringify(body),
     });
     return this.parseJson<T>(res, "PUT", path);
@@ -76,14 +82,14 @@ export class HubClient {
   async delete<T>(path: string): Promise<T> {
     const res = await fetch(this.url(path), {
       method: "DELETE",
-      headers: this.bridgeHeaders(),
+      headers: this.headers(),
     });
     return this.parseJson<T>(res, "DELETE", path);
   }
 
   /** Raw text response — for endpoints like /bundle that return XML. */
   async getText(path: string): Promise<string> {
-    const res = await fetch(this.url(path), { headers: this.bridgeHeaders() });
+    const res = await fetch(this.url(path), { headers: this.headers() });
     if (!res.ok) {
       throw new Error(
         `GET ${path}: ${res.status} ${res.statusText} ${await res.text()}`
@@ -92,14 +98,20 @@ export class HubClient {
     return res.text();
   }
 
-  private url(path: string): string {
-    return `${this.baseUrl}${path}`;
+  /**
+   * Combined header builder. Adds `X-Bridge-Id` when the bridge is registered
+   * so the hub can attribute requests, and `x-promptery-actor` (the agent
+   * hint) so the activity log knows which agent performed each mutation.
+   */
+  private headers(extra: Record<string, string> = {}): Record<string, string> {
+    const headers: Record<string, string> = { ...extra };
+    if (this.bridgeId) headers["X-Bridge-Id"] = this.bridgeId;
+    if (this.agentHint) headers["x-promptery-actor"] = this.agentHint;
+    return headers;
   }
 
-  /** Returns `X-Bridge-Id` header when the bridge is registered. */
-  private bridgeHeaders(): Record<string, string> {
-    if (!this.bridgeId) return {};
-    return { "X-Bridge-Id": this.bridgeId };
+  private url(path: string): string {
+    return `${this.baseUrl}${path}`;
   }
 
   private async parseJson<T>(

@@ -1,7 +1,8 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { zValidator } from "@hono/zod-validator";
 import { getDb } from "../../db/index.js";
 import * as q from "../../db/queries/index.js";
+import type { TaskEventType } from "../../db/queries/taskEvents.js";
 import {
   createTaskSchema,
   updateTaskSchema,
@@ -16,6 +17,44 @@ import { bus } from "../events/bus.js";
 import { buildContextBundle } from "../../lib/context.js";
 import { resolveTaskContext } from "../../db/inheritance/index.js";
 import { getBridgeRoleIds } from "../bridgeRegistry.js";
+
+/**
+ * Bridge clients (MCP) tag mutations with their `agent_hint` via this header
+ * so the task timeline can attribute history. Direct UI calls omit it,
+ * which we record as a NULL actor.
+ */
+const ACTOR_HEADER = "x-promptery-actor";
+
+function readActor(c: Context): string | null {
+  const raw = c.req.header(ACTOR_HEADER);
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/**
+ * Append an entry to the task timeline and broadcast it on the bus so any
+ * open dialog gets a live append. Centralised so call sites stay one line
+ * and the WS payload shape is consistent across mutation types.
+ */
+function logTaskEvent(
+  c: Context,
+  boardId: string,
+  taskId: string,
+  type: TaskEventType,
+  details: Record<string, unknown> | null = null
+): void {
+  const event = q.recordTaskEvent(getDb(), {
+    task_id: taskId,
+    type,
+    actor: readActor(c),
+    details,
+  });
+  bus.publish({
+    type: "task.event_recorded",
+    data: { boardId, taskId, event },
+  });
+}
 
 export const boardTasksRoute = new Hono();
 
@@ -57,6 +96,10 @@ boardTasksRoute.post("/:boardId/tasks", zValidator("json", createTaskSchema), (c
   const task = q.createTask(getDb(), boardId, column_id, { title, description });
   // Refetch with relations so the event shape matches GET /tasks/:id
   const full = q.getTask(getDb(), task.id)!;
+  logTaskEvent(c, boardId, task.id, "task.created", {
+    column_id,
+    title: full.title,
+  });
   bus.publish({ type: "task.created", data: { boardId, task: full } });
   return c.json(full, 201);
 });
@@ -77,6 +120,25 @@ tasksRoute.get("/search", (c) => {
   }
   const results = q.searchTasks(getDb(), parsed.data);
   return c.json(results);
+});
+
+/**
+ * Activity timeline — newest-first list of mutation events for a task.
+ * Powers the collapsible "Activity" section in TaskDialog. The optional
+ * `limit` query param is clamped server-side; the backing index makes
+ * this query effectively free for the dialog's open-on-demand pattern.
+ */
+tasksRoute.get("/:id/events", (c) => {
+  const id = c.req.param("id");
+  if (!q.getTask(getDb(), id)) return c.json({ error: "task not found" }, 404);
+  const limitRaw = c.req.query("limit");
+  const limit = limitRaw ? Number.parseInt(limitRaw, 10) : undefined;
+  const events = q.listEventsForTask(
+    getDb(),
+    id,
+    Number.isFinite(limit) ? (limit as number) : undefined
+  );
+  return c.json(events);
 });
 
 /**
@@ -200,6 +262,25 @@ tasksRoute.patch("/:id", zValidator("json", updateTaskSchema), (c) => {
   const updated = q.updateTask(getDb(), id, input);
   if (!updated) return c.json({ error: "task not found" }, 404);
   const full = q.getTask(getDb(), id)!;
+  // Diff existing vs input so the timeline records *which* fields actually
+  // changed — `description` edits and a `column_id` patch (used for cross
+  // column drag) read very differently in the activity log.
+  const changes: Record<string, { from: unknown; to: unknown }> = {};
+  if (input.title !== undefined && input.title !== existing.title) {
+    changes.title = { from: existing.title, to: input.title };
+  }
+  if (input.description !== undefined && input.description !== existing.description) {
+    changes.description = { from: existing.description, to: input.description };
+  }
+  if (input.column_id !== undefined && input.column_id !== existing.column_id) {
+    changes.column_id = { from: existing.column_id, to: input.column_id };
+  }
+  if (input.position !== undefined && input.position !== existing.position) {
+    changes.position = { from: existing.position, to: input.position };
+  }
+  if (Object.keys(changes).length > 0) {
+    logTaskEvent(c, updated.board_id, updated.id, "task.updated", { changes });
+  }
   bus.publish({
     type: "task.updated",
     data: { boardId: updated.board_id, taskId: updated.id, task: full },
@@ -221,6 +302,12 @@ tasksRoute.post("/:id/move", zValidator("json", moveTaskSchema), (c) => {
   const oldColumnId = existing.column_id;
   const moved = q.moveTask(getDb(), id, column_id, position);
   if (!moved) return c.json({ error: "task not found" }, 404);
+  logTaskEvent(c, moved.board_id, moved.id, "task.moved", {
+    old_column_id: existing.column_id,
+    new_column_id: column_id,
+    old_position: existing.position,
+    new_position: moved.position,
+  });
   bus.publish({
     type: "task.moved",
     data: {
@@ -254,6 +341,13 @@ tasksRoute.put("/:id/role", zValidator("json", setTaskRoleSchema), (c) => {
   }
   q.setTaskRole(getDb(), id, role_id);
   const full = q.getTask(getDb(), id)!;
+  if (existing.role_id !== role_id) {
+    logTaskEvent(c, full.board_id, id, "task.role_changed", {
+      old_role_id: existing.role_id,
+      new_role_id: role_id,
+      role_name: full.role?.name ?? null,
+    });
+  }
   bus.publish({
     type: "task.role_changed",
     data: { boardId: full.board_id, taskId: id, roleId: role_id, task: full },
@@ -265,9 +359,14 @@ tasksRoute.post("/:id/prompts", zValidator("json", addTaskPromptSchema), (c) => 
   const taskId = c.req.param("id");
   const { prompt_id } = c.req.valid("json");
   if (!q.getTask(getDb(), taskId)) return c.json({ error: "task not found" }, 404);
-  if (!q.getPrompt(getDb(), prompt_id)) return c.json({ error: "prompt not found" }, 404);
+  const prompt = q.getPrompt(getDb(), prompt_id);
+  if (!prompt) return c.json({ error: "prompt not found" }, 404);
   q.addTaskPrompt(getDb(), taskId, prompt_id, "direct");
   const full = q.getTask(getDb(), taskId)!;
+  logTaskEvent(c, full.board_id, taskId, "task.prompt_added", {
+    prompt_id,
+    prompt_name: prompt.name,
+  });
   bus.publish({
     type: "task.prompt_added",
     data: { boardId: full.board_id, taskId, promptId: prompt_id, task: full },
@@ -287,8 +386,13 @@ tasksRoute.delete("/:id/prompts/:promptId", (c) => {
       403
     );
   }
+  const prompt = q.getPrompt(getDb(), promptId);
   q.removeTaskPrompt(getDb(), taskId, promptId);
   const full = q.getTask(getDb(), taskId)!;
+  logTaskEvent(c, full.board_id, taskId, "task.prompt_removed", {
+    prompt_id: promptId,
+    prompt_name: prompt?.name ?? null,
+  });
   bus.publish({
     type: "task.prompt_removed",
     data: { boardId: full.board_id, taskId, promptId, task: full },
@@ -300,9 +404,14 @@ tasksRoute.post("/:id/skills", zValidator("json", addTaskSkillSchema), (c) => {
   const taskId = c.req.param("id");
   const { skill_id } = c.req.valid("json");
   if (!q.getTask(getDb(), taskId)) return c.json({ error: "task not found" }, 404);
-  if (!q.getSkill(getDb(), skill_id)) return c.json({ error: "skill not found" }, 404);
+  const skill = q.getSkill(getDb(), skill_id);
+  if (!skill) return c.json({ error: "skill not found" }, 404);
   q.addTaskSkill(getDb(), taskId, skill_id, "direct");
   const full = q.getTask(getDb(), taskId)!;
+  logTaskEvent(c, full.board_id, taskId, "task.skill_added", {
+    skill_id,
+    skill_name: skill.name,
+  });
   bus.publish({
     type: "task.skill_added",
     data: { boardId: full.board_id, taskId, skillId: skill_id, task: full },
@@ -322,8 +431,13 @@ tasksRoute.delete("/:id/skills/:skillId", (c) => {
       403
     );
   }
+  const skill = q.getSkill(getDb(), skillId);
   q.removeTaskSkill(getDb(), taskId, skillId);
   const full = q.getTask(getDb(), taskId)!;
+  logTaskEvent(c, full.board_id, taskId, "task.skill_removed", {
+    skill_id: skillId,
+    skill_name: skill?.name ?? null,
+  });
   bus.publish({
     type: "task.skill_removed",
     data: { boardId: full.board_id, taskId, skillId, task: full },
@@ -335,9 +449,14 @@ tasksRoute.post("/:id/mcp_tools", zValidator("json", addTaskMcpToolSchema), (c) 
   const taskId = c.req.param("id");
   const { mcp_tool_id } = c.req.valid("json");
   if (!q.getTask(getDb(), taskId)) return c.json({ error: "task not found" }, 404);
-  if (!q.getMcpTool(getDb(), mcp_tool_id)) return c.json({ error: "mcp tool not found" }, 404);
+  const tool = q.getMcpTool(getDb(), mcp_tool_id);
+  if (!tool) return c.json({ error: "mcp tool not found" }, 404);
   q.addTaskMcpTool(getDb(), taskId, mcp_tool_id, "direct");
   const full = q.getTask(getDb(), taskId)!;
+  logTaskEvent(c, full.board_id, taskId, "task.mcp_tool_added", {
+    mcp_tool_id,
+    mcp_tool_name: tool.name,
+  });
   bus.publish({
     type: "task.mcp_tool_added",
     data: { boardId: full.board_id, taskId, mcpToolId: mcp_tool_id, task: full },
@@ -357,8 +476,13 @@ tasksRoute.delete("/:id/mcp_tools/:mcpToolId", (c) => {
       403
     );
   }
+  const tool = q.getMcpTool(getDb(), mcpToolId);
   q.removeTaskMcpTool(getDb(), taskId, mcpToolId);
   const full = q.getTask(getDb(), taskId)!;
+  logTaskEvent(c, full.board_id, taskId, "task.mcp_tool_removed", {
+    mcp_tool_id: mcpToolId,
+    mcp_tool_name: tool?.name ?? null,
+  });
   bus.publish({
     type: "task.mcp_tool_removed",
     data: { boardId: full.board_id, taskId, mcpToolId, task: full },

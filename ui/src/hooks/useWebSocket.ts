@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { wsClient } from "../lib/ws.js";
 import { qk } from "../lib/query.js";
-import type { ServerEvent } from "../lib/types.js";
+import type { ServerEvent, TaskEvent } from "../lib/types.js";
 
 export function useWebSocket(): void {
   const qc = useQueryClient();
@@ -171,6 +171,14 @@ export function useWebSocket(): void {
         case "prompt_group.updated":
           qc.invalidateQueries({ queryKey: qk.promptGroups });
           qc.invalidateQueries({ queryKey: qk.promptGroup(evt.data.groupId) });
+          break;
+        case "task.event_recorded":
+          // Prepend the new event so an open dialog updates without refetching
+          // — the route returns newest-first, matching this insertion order.
+          qc.setQueryData<TaskEvent[]>(qk.taskEvents(evt.data.taskId), (old) => {
+            if (!old) return [evt.data.event];
+            return [evt.data.event, ...old];
+          });
           break;
       }
     });

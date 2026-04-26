@@ -23,6 +23,7 @@ import type {
   Space,
   SpaceWithBoards,
   Task,
+  TaskEvent,
   UpdatePrimitiveInput,
   UpdateTaskInput,
 } from "./types.js";
@@ -223,6 +224,10 @@ export const api = {
         column: { id: string; name: string; position: number };
         board: { id: string; name: string };
       }>(`/api/tasks/${encodeURIComponent(idOrSlug)}/with-location`),
+    events: (id: string, limit?: number) =>
+      request<TaskEvent[]>(
+        limit ? `/api/tasks/${id}/events?limit=${limit}` : `/api/tasks/${id}/events`
+      ),
   },
   prompts: primitiveResource<Prompt>("/api/prompts"),
   promptGroups: {

@@ -30,5 +30,6 @@ export const qk = {
   taskContext: (id: string) => ["task-context", id] as const,
   taskWithLocation: (idOrSlug: string) =>
     ["task-with-location", idOrSlug] as const,
+  taskEvents: (id: string) => ["task-events", id] as const,
   meta: ["meta"] as const,
 };

@@ -38,6 +38,7 @@ export function runMigrations(db: Database, opts: RunMigrationsOptions = {}): vo
   runMigration(db, "009_spaces", apply009Spaces);
   runMigration(db, "010_board_position", apply010BoardPosition);
   runMigration(db, "011_prompt_short_description", apply011PromptShortDescription);
+  runMigration(db, "012_task_events", apply012TaskEvents);
   backfillDefaultColumnsForEmptyBoards(db);
 }
 
@@ -549,6 +550,18 @@ function apply011PromptShortDescription(db: Database): void {
   if (!cols.some((c) => c.name === "short_description")) {
     db.exec("ALTER TABLE prompts ADD COLUMN short_description TEXT");
   }
+}
+
+/**
+ * Apply 012: stand up the task_events activity-log table + index. Additive
+ * only — no backfill is meaningful since pre-existing tasks have no
+ * history to recover. Schema.sql also declares this table on fresh
+ * installs so first-run tests see it without needing migrations.
+ */
+function apply012TaskEvents(db: Database): void {
+  const sqlUrl = new URL("./migrations/012_task_events.sql", import.meta.url);
+  const sql = readFileSync(sqlUrl, "utf-8");
+  db.exec(sql);
 }
 
 /**

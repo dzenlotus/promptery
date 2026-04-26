@@ -9,6 +9,7 @@ import { MilkdownEditor } from "../editor/MilkdownEditor.js";
 import { RoleSelector } from "./RoleSelector.js";
 import { TaskPromptsEditor } from "./TaskPromptsEditor.js";
 import { TaskEffectiveContext } from "./TaskEffectiveContext.js";
+import { TaskActivityLog } from "./TaskActivityLog.js";
 import { api } from "../../lib/api.js";
 import { qk } from "../../lib/query.js";
 import { usePrompts } from "../../hooks/usePrompts.js";
@@ -300,6 +301,11 @@ export function TaskDialog(props: Props) {
             allPrompts={allPrompts}
           />
         </Field>
+
+        {/* Activity timeline — only meaningful for an existing task; in
+            create mode there's nothing to log yet. Default-collapsed so
+            it doesn't shift the dialog every time a user opens an edit. */}
+        {mode === "edit" && editingId ? <TaskActivityLog taskId={editingId} /> : null}
       </div>
     </Dialog>
   );

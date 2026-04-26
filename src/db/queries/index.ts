@@ -13,4 +13,5 @@ export * from "./settings.js";
 export * from "./boardPrompts.js";
 export * from "./columnPrompts.js";
 export * from "./promptGroups.js";
+export * from "./taskEvents.js";
 export * from "./errors.js";

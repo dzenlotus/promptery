@@ -385,4 +385,34 @@ export type ServerEvent =
     }
   | { type: "data.restored"; data: { filename: string } }
   | { type: "data.backup_created"; data: { filename: string; reason: string } }
-  | { type: "data.backup_deleted"; data: { filename: string } };
+  | { type: "data.backup_deleted"; data: { filename: string } }
+  | {
+      type: "task.event_recorded";
+      data: { boardId: string; taskId: string; event: TaskEvent };
+    };
+
+/** Closed enum of activity-log event types — keep in sync with server. */
+export type TaskEventType =
+  | "task.created"
+  | "task.updated"
+  | "task.moved"
+  | "task.deleted"
+  | "task.role_changed"
+  | "task.prompt_added"
+  | "task.prompt_removed"
+  | "task.skill_added"
+  | "task.skill_removed"
+  | "task.mcp_tool_added"
+  | "task.mcp_tool_removed";
+
+export interface TaskEvent {
+  id: string;
+  task_id: string;
+  type: TaskEventType;
+  /** `null` when triggered by direct UI requests; otherwise the bridge's
+   *  agent_hint (e.g. `claude-desktop`, `cursor`). */
+  actor: string | null;
+  /** Type-specific JSON payload — see backend recordTaskEvent call sites. */
+  details: Record<string, unknown> | null;
+  created_at: number;
+}
