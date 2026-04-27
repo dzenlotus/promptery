@@ -3,15 +3,40 @@ import type { Prompt } from "./prompts.js";
 
 export type TaskPrompt = Prompt & { origin: string };
 
+interface RawTaskPromptRow {
+  id: string;
+  name: string;
+  content: string;
+  color: string;
+  short_description: string | null;
+  token_count: number | null;
+  created_at: number;
+  updated_at: number;
+  origin: string;
+}
+
 export function listTaskPrompts(db: Database, taskId: string): TaskPrompt[] {
-  return db
+  const rows = db
     .prepare(
       `SELECT p.*, tp.origin FROM prompts p
        JOIN task_prompts tp ON tp.prompt_id = p.id
        WHERE tp.task_id = ?
        ORDER BY tp.position ASC`
     )
-    .all(taskId) as TaskPrompt[];
+    .all(taskId) as RawTaskPromptRow[];
+  // token_count can briefly be NULL on legacy DBs between schema-init and
+  // migration-014 backfill; normalise to 0 so consumers always see a number.
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    content: r.content,
+    color: r.color,
+    short_description: r.short_description ?? null,
+    token_count: r.token_count ?? 0,
+    created_at: r.created_at,
+    updated_at: r.updated_at,
+    origin: r.origin,
+  }));
 }
 
 export function getTaskPromptOrigin(

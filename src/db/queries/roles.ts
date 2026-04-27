@@ -18,6 +18,9 @@ export interface RoleWithRelations extends Role {
   prompts: Prompt[];
   skills: Skill[];
   mcp_tools: McpTool[];
+  /** Sum of token_count across the role's default prompts. Computed from the
+   *  cached per-prompt counts on the join — no separate storage. */
+  token_count: number;
 }
 
 export interface CreateRoleInput {
@@ -116,14 +119,18 @@ export function deleteRole(db: Database, id: string): boolean {
 export function getRoleWithRelations(db: Database, id: string): RoleWithRelations | null {
   const role = getRole(db, id);
   if (!role) return null;
-  const prompts = db
+  const promptRows = db
     .prepare(
       `SELECT p.* FROM prompts p
        JOIN role_prompts rp ON rp.prompt_id = p.id
        WHERE rp.role_id = ?
        ORDER BY rp.position ASC`
     )
-    .all(id) as Prompt[];
+    .all(id) as Array<Omit<Prompt, "token_count"> & { token_count: number | null }>;
+  const prompts: Prompt[] = promptRows.map((p) => ({
+    ...p,
+    token_count: p.token_count ?? 0,
+  }));
   const skills = db
     .prepare(
       `SELECT s.* FROM skills s
@@ -140,7 +147,8 @@ export function getRoleWithRelations(db: Database, id: string): RoleWithRelation
        ORDER BY rm.position ASC`
     )
     .all(id) as McpTool[];
-  return { ...role, prompts, skills, mcp_tools };
+  const token_count = prompts.reduce((sum, p) => sum + p.token_count, 0);
+  return { ...role, prompts, skills, mcp_tools, token_count };
 }
 
 /**

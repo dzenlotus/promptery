@@ -33,6 +33,7 @@ interface PromptRow {
   content: string;
   color: string | null;
   short_description: string | null;
+  token_count: number | null;
   /** Join-table position used for within-origin ordering. */
   position: number;
 }
@@ -77,8 +78,9 @@ export function resolveTaskContext(
   const role = resolveActiveRole(db, task);
   const prompts = resolvePrompts(db, task, role);
   const disabled_prompts = listDisabledPromptIds(db, taskId);
+  const total_token_count = prompts.reduce((sum, p) => sum + p.token_count, 0);
 
-  return { task_id: taskId, role, prompts, disabled_prompts };
+  return { task_id: taskId, role, prompts, disabled_prompts, total_token_count };
 }
 
 function resolveActiveRole(db: Database, task: TaskJoinRow): ResolvedRole | null {
@@ -95,6 +97,20 @@ function resolveActiveRole(db: Database, task: TaskJoinRow): ResolvedRole | null
   return null;
 }
 
+function normalizePromptRow(row: PromptRow): Omit<ResolvedPrompt, "origin" | "source"> {
+  // token_count comes back nullable on legacy rows that haven't been
+  // backfilled (shouldn't happen in practice — migration 014 fills them — but
+  // belt-and-suspenders the resolver against partial states).
+  return {
+    id: row.id,
+    name: row.name,
+    content: row.content,
+    color: row.color,
+    short_description: row.short_description,
+    token_count: row.token_count ?? 0,
+  };
+}
+
 function resolvePrompts(
   db: Database,
   task: TaskJoinRow,
@@ -105,14 +121,15 @@ function resolvePrompts(
   // 1. Direct on the task.
   const directPrompts = db
     .prepare(
-      `SELECT p.id, p.name, p.content, p.color, p.short_description, tp.position
+      `SELECT p.id, p.name, p.content, p.color, p.short_description, p.token_count, tp.position
        FROM task_prompts tp
        JOIN prompts p ON p.id = tp.prompt_id
        WHERE tp.task_id = ? AND tp.origin = 'direct'
        ORDER BY tp.position ASC, p.name ASC`
     )
     .all(task.id) as PromptRow[];
-  for (const p of directPrompts) collected.push({ ...p, origin: "direct", _position: p.position });
+  for (const p of directPrompts)
+    collected.push({ ...normalizePromptRow(p), origin: "direct", _position: p.position });
 
   // 2. Active role's prompts (whichever layer it came from — source tells us).
   if (activeRole) {
@@ -130,7 +147,7 @@ function resolvePrompts(
     const origin: PromptOrigin = activeRole.source === "task" ? "role" : sourceType;
     for (const p of rolePrompts) {
       collected.push({
-        ...p,
+        ...normalizePromptRow(p),
         origin,
         source: { type: sourceType, id: activeRole.id, name: activeRole.name },
         _position: p.position,
@@ -141,7 +158,7 @@ function resolvePrompts(
   // 3. Direct prompts on the column.
   const columnPrompts = db
     .prepare(
-      `SELECT p.id, p.name, p.content, p.color, p.short_description, cp.position
+      `SELECT p.id, p.name, p.content, p.color, p.short_description, p.token_count, cp.position
        FROM column_prompts cp
        JOIN prompts p ON p.id = cp.prompt_id
        WHERE cp.column_id = ?
@@ -150,7 +167,7 @@ function resolvePrompts(
     .all(task.column_id) as PromptRow[];
   for (const p of columnPrompts) {
     collected.push({
-      ...p,
+      ...normalizePromptRow(p),
       origin: "column",
       source: { type: "column", id: task.column_id, name: task.column_name },
       _position: p.position,
@@ -167,7 +184,7 @@ function resolvePrompts(
     if (colRole) {
       for (const p of selectRolePrompts(db, task.column_role_id)) {
         collected.push({
-          ...p,
+          ...normalizePromptRow(p),
           origin: "column-role",
           source: { type: "column-role", id: colRole.id, name: colRole.name },
           _position: p.position,
@@ -179,7 +196,7 @@ function resolvePrompts(
   // 5. Direct prompts on the board.
   const boardPrompts = db
     .prepare(
-      `SELECT p.id, p.name, p.content, p.color, p.short_description, bp.position
+      `SELECT p.id, p.name, p.content, p.color, p.short_description, p.token_count, bp.position
        FROM board_prompts bp
        JOIN prompts p ON p.id = bp.prompt_id
        WHERE bp.board_id = ?
@@ -188,7 +205,7 @@ function resolvePrompts(
     .all(task.board_id) as PromptRow[];
   for (const p of boardPrompts) {
     collected.push({
-      ...p,
+      ...normalizePromptRow(p),
       origin: "board",
       source: { type: "board", id: task.board_id, name: task.board_name },
       _position: p.position,
@@ -207,7 +224,7 @@ function resolvePrompts(
     if (boardRole) {
       for (const p of selectRolePrompts(db, task.board_role_id)) {
         collected.push({
-          ...p,
+          ...normalizePromptRow(p),
           origin: "board-role",
           source: { type: "board-role", id: boardRole.id, name: boardRole.name },
           _position: p.position,
@@ -260,7 +277,7 @@ function fetchRoleRow(db: Database, id: string): RoleRow | null {
 function selectRolePrompts(db: Database, roleId: string): PromptRow[] {
   return db
     .prepare(
-      `SELECT p.id, p.name, p.content, p.color, p.short_description, rp.position
+      `SELECT p.id, p.name, p.content, p.color, p.short_description, p.token_count, rp.position
        FROM role_prompts rp
        JOIN prompts p ON p.id = rp.prompt_id
        WHERE rp.role_id = ?

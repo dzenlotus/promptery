@@ -12,6 +12,8 @@ import { Tooltip } from "../ui/Tooltip.js";
 import { TagChip } from "./TagChip.js";
 import { PromptsTagFilter } from "./PromptsTagFilter.js";
 import { usePromptTagsMap } from "../../hooks/useTags.js";
+import { TokenBadge } from "../common/TokenBadge.js";
+import { useTokenBadgeConfig } from "../../hooks/useTokenBadge.js";
 import type { Prompt, PromptGroup } from "../../lib/types.js";
 
 interface Props {
@@ -59,6 +61,7 @@ export function PromptsSidebarList({
   const [deletingGroup, setDeletingGroup] = useState<PromptGroup | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const { tagsByPrompt } = usePromptTagsMap();
+  const tokenCfg = useTokenBadgeConfig();
 
   // Apply the single-tag filter — when active, only prompts whose tag set
   // contains `activeTagId` survive. The filter is intentionally cheap so
@@ -138,6 +141,16 @@ export function PromptsSidebarList({
                     onDuplicate={() => onDuplicate(p.id)}
                     onDelete={() => onDelete(p.id)}
                     testIdPrefix="prompt-row"
+                    trailing={
+                      tokenCfg.enabled ? (
+                        <TokenBadge
+                          count={p.token_count ?? 0}
+                          thresholds={tokenCfg.thresholds}
+                          size="xs"
+                          testId={`prompt-token-badge-${p.id}`}
+                        />
+                      ) : undefined
+                    }
                   />
                   {tags.length > 0 && (
                     <div

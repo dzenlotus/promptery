@@ -1,9 +1,12 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check, Folder, X } from "lucide-react";
 import { api } from "../../lib/api.js";
 import { qk } from "../../lib/query.js";
 import { useRole } from "../../hooks/useRoles.js";
+import { useTokenBadgeConfig } from "../../hooks/useTokenBadge.js";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/Popover.js";
+import { TokenBadge } from "../common/TokenBadge.js";
 import type { Prompt } from "../../lib/types.js";
 import { cn } from "../../lib/cn.js";
 import {
@@ -107,6 +110,26 @@ export function TaskEffectiveContext({
     (l) => l.layerRole !== null || l.entries.length > 0
   );
 
+  // Token total: union of every applied prompt id across all layers,
+  // mirroring the backend resolver's union-and-dedup. The breakdown popover
+  // sorts by per-prompt token count so users can spot the heaviest ones.
+  const tokenCfg = useTokenBadgeConfig();
+  const breakdown = useMemo(() => {
+    const ids = new Set<string>();
+    for (const layer of layers) {
+      for (const entry of layer.entries) {
+        if (entry.applied) ids.add(entry.promptId);
+      }
+    }
+    const items = Array.from(ids)
+      .map((id) => promptById.get(id))
+      .filter((p): p is Prompt => Boolean(p))
+      .map((p) => ({ id: p.id, name: p.name, tokens: p.token_count ?? 0 }));
+    items.sort((a, b) => b.tokens - a.tokens);
+    const total = items.reduce((sum, item) => sum + item.tokens, 0);
+    return { items, total };
+  }, [layers, promptById]);
+
   if (!anyContent) {
     return (
       <div
@@ -124,6 +147,15 @@ export function TaskEffectiveContext({
   // collapse to nothing so the card never shows a bare header.
   return (
     <div data-testid="task-effective-context" className="grid gap-3">
+      {tokenCfg.enabled && breakdown.items.length > 0 && (
+        <div className="flex items-center justify-end">
+          <TokenTotalBadge
+            total={breakdown.total}
+            items={breakdown.items}
+            thresholds={tokenCfg.thresholds}
+          />
+        </div>
+      )}
       {layers.map((layer) => {
         if (layer.layerRole === null && layer.entries.length === 0) return null;
         return (
@@ -135,6 +167,70 @@ export function TaskEffectiveContext({
         );
       })}
     </div>
+  );
+}
+
+/**
+ * Click-to-open popover that surfaces the per-prompt token contributions to
+ * a task bundle. Sorted by tokens descending so the heaviest prompts are
+ * easiest to spot when trimming context.
+ */
+function TokenTotalBadge({
+  total,
+  items,
+  thresholds,
+}: {
+  total: number;
+  items: Array<{ id: string; name: string; tokens: number }>;
+  thresholds: { yellow: number; orange: number; red: number };
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          data-testid="task-bundle-token-total"
+          className="rounded outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-accent)]"
+          aria-label={`Total ${total} tokens — click for breakdown`}
+        >
+          <TokenBadge
+            count={total}
+            thresholds={thresholds}
+            size="sm"
+            title={`Total ${total.toLocaleString()} tokens — click for breakdown`}
+          />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-72 p-0">
+        <div className="px-3 py-2 border-b border-[var(--color-border)] flex items-center justify-between">
+          <span className="text-[11px] uppercase tracking-[0.1em] text-[var(--color-text-subtle)]">
+            Token breakdown
+          </span>
+          <span className="text-[11px] tabular-nums font-mono text-[var(--color-text-muted)]">
+            {total.toLocaleString()}
+          </span>
+        </div>
+        <ul
+          className="max-h-72 overflow-y-auto py-1 grid"
+          data-testid="task-bundle-token-breakdown"
+        >
+          {items.map((item) => (
+            <li
+              key={item.id}
+              className="grid grid-cols-[1fr_auto] items-center gap-2 px-3 h-7 text-[12px]"
+            >
+              <span className="truncate" title={item.name}>
+                {item.name}
+              </span>
+              <span className="text-[11px] font-mono tabular-nums text-[var(--color-text-muted)]">
+                {item.tokens.toLocaleString()}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </PopoverContent>
+    </Popover>
   );
 }
 

@@ -9,6 +9,10 @@ export interface PromptGroup {
   created_at: number;
   updated_at: number;
   prompt_count: number;
+  /** Sum of cl100k_base token counts across every member prompt. Computed
+   *  on-the-fly from the cached `prompts.token_count` column — no separate
+   *  storage to drift. */
+  token_count: number;
   /** Member prompt ids in group-position order. Populated on list/get so
    *  consumers don't need a second round trip to compute coverage (e.g. the
    *  multi-select in board/column dialogs treats a "fully selected" group
@@ -22,6 +26,7 @@ export interface PromptInGroup {
   content: string;
   color: string | null;
   short_description: string | null;
+  token_count: number;
   /** Position of this prompt within THIS group (not the prompt's own order). */
   position: number;
 }
@@ -50,6 +55,7 @@ interface GroupRow {
   created_at: number;
   updated_at: number;
   prompt_count: number;
+  token_count: number;
   /** CSV of prompt ids in position order; SQLite's GROUP_CONCAT lacks a
    *  stable "ORDER BY" guarantee, so callers re-sort when they need strict
    *  order — our subquery pre-sorts via a nested SELECT below. */
@@ -64,11 +70,17 @@ function splitMemberIds(csv: string | null): string[] {
 /**
  * Lists groups with member ids bundled in. The nested SELECT inside
  * GROUP_CONCAT ensures position ordering — SQLite otherwise gives no
- * guarantee about the concatenation order.
+ * guarantee about the concatenation order. token_count is summed over
+ * member prompts on the fly; COALESCE protects against legacy rows that
+ * predate migration 014.
  */
 const LIST_GROUPS_SQL = `
   SELECT pg.*,
     (SELECT COUNT(*) FROM prompt_group_members WHERE group_id = pg.id) AS prompt_count,
+    (SELECT COALESCE(SUM(p.token_count), 0)
+       FROM prompt_group_members pgm
+       JOIN prompts p ON p.id = pgm.prompt_id
+       WHERE pgm.group_id = pg.id) AS token_count,
     (SELECT GROUP_CONCAT(prompt_id)
        FROM (SELECT prompt_id FROM prompt_group_members
               WHERE group_id = pg.id
@@ -88,6 +100,7 @@ export function listPromptGroups(db: Database): PromptGroup[] {
     created_at: r.created_at,
     updated_at: r.updated_at,
     prompt_count: r.prompt_count,
+    token_count: r.token_count ?? 0,
     member_ids: splitMemberIds(r.member_ids_csv),
   }));
 }
@@ -98,15 +111,24 @@ export function getPromptGroup(db: Database, id: string): PromptGroupWithPrompts
     | undefined;
   if (!group) return null;
 
-  const prompts = db
+  const promptRows = db
     .prepare(
-      `SELECT p.id, p.name, p.content, p.color, p.short_description, pgm.position
+      `SELECT p.id, p.name, p.content, p.color, p.short_description, p.token_count, pgm.position
        FROM prompt_group_members pgm
        JOIN prompts p ON p.id = pgm.prompt_id
        WHERE pgm.group_id = ?
        ORDER BY pgm.position ASC, p.name ASC`
     )
-    .all(id) as PromptInGroup[];
+    .all(id) as Array<Omit<PromptInGroup, "token_count"> & { token_count: number | null }>;
+  const prompts: PromptInGroup[] = promptRows.map((p) => ({
+    id: p.id,
+    name: p.name,
+    content: p.content,
+    color: p.color,
+    short_description: p.short_description,
+    token_count: p.token_count ?? 0,
+    position: p.position,
+  }));
 
   return {
     id: group.id,
@@ -116,6 +138,7 @@ export function getPromptGroup(db: Database, id: string): PromptGroupWithPrompts
     created_at: group.created_at,
     updated_at: group.updated_at,
     prompt_count: group.prompt_count,
+    token_count: group.token_count ?? 0,
     member_ids: splitMemberIds(group.member_ids_csv),
     prompts,
   };
@@ -288,6 +311,10 @@ export function getGroupsForPrompt(db: Database, promptId: string): PromptGroup[
     .prepare(
       `SELECT pg.*,
          (SELECT COUNT(*) FROM prompt_group_members WHERE group_id = pg.id) AS prompt_count,
+         (SELECT COALESCE(SUM(p.token_count), 0)
+            FROM prompt_group_members pgm2
+            JOIN prompts p ON p.id = pgm2.prompt_id
+            WHERE pgm2.group_id = pg.id) AS token_count,
          (SELECT GROUP_CONCAT(prompt_id)
             FROM (SELECT prompt_id FROM prompt_group_members
                    WHERE group_id = pg.id
@@ -306,6 +333,7 @@ export function getGroupsForPrompt(db: Database, promptId: string): PromptGroup[
     created_at: r.created_at,
     updated_at: r.updated_at,
     prompt_count: r.prompt_count,
+    token_count: r.token_count ?? 0,
     member_ids: splitMemberIds(r.member_ids_csv),
   }));
 }

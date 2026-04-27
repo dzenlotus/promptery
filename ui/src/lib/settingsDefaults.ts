@@ -23,6 +23,16 @@ export const SETTINGS_DEFAULTS = {
   "behavior.language": "en" as "en" | "ru",
 
   "data.backups.autoKeepDays": 30 as number,
+
+  // Token-count badge controls (task #20). When `enabled` is false every
+  // TokenBadge call site is a no-op. Threshold numbers drive the colour
+  // ladder; tokenizer is locked to cl100k_base today (the only encoder we
+  // ship), but the field exists for future model pickers.
+  "tokens.enabled": true as boolean,
+  "tokens.threshold_yellow": 5000 as number,
+  "tokens.threshold_orange": 15000 as number,
+  "tokens.threshold_red": 30000 as number,
+  "tokens.tokenizer": "cl100k_base" as "cl100k_base",
 } as const;
 
 export type SettingKey = keyof typeof SETTINGS_DEFAULTS;

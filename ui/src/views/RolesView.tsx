@@ -79,6 +79,7 @@ export function RolesView() {
         prompts: [],
         skills: [],
         mcp_tools: [],
+        token_count: 0,
       });
       invalidateList();
     },

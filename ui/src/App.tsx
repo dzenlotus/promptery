@@ -20,6 +20,7 @@ import { McpToolsView } from "./views/McpToolsView.js";
 import { SettingsRedirect } from "./views/SettingsRedirect.js";
 import { SettingsDataView } from "./views/SettingsDataView.js";
 import { SettingsAppearanceView } from "./views/SettingsAppearanceView.js";
+import { SettingsTokensView } from "./views/SettingsTokensView.js";
 import { queryClient } from "./lib/query.js";
 import { useWebSocket } from "./hooks/useWebSocket.js";
 import { useUndoRedoHotkeys } from "./hooks/useUndoRedoHotkeys.js";
@@ -49,6 +50,7 @@ function Routed() {
       <Route path="/settings" component={SettingsRedirect} />
       <Route path="/settings/data" component={SettingsDataView} />
       <Route path="/settings/appearance" component={SettingsAppearanceView} />
+      <Route path="/settings/tokens" component={SettingsTokensView} />
       <Route>
         <NotFoundView />
       </Route>

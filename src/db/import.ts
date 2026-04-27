@@ -1,5 +1,6 @@
 import type { Database, Statement } from "better-sqlite3";
 import { nanoid } from "nanoid";
+import { countTokens } from "../lib/tokenCount.js";
 
 type PreparedStatement = Statement<unknown[]>;
 import {

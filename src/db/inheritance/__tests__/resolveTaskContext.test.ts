@@ -302,4 +302,26 @@ describe("resolveTaskContext — per-task prompt overrides", () => {
     expect(ctx?.prompts).toEqual([]);
     expect(ctx?.disabled_prompts).toEqual([pRole.id]);
   });
+
+  it("populates token_count per prompt and total_token_count on the bundle", () => {
+    const b = createBoard(db, "B");
+    const col = firstColumnId(db, b.id);
+    const t = createTask(db, b.id, col, { title: "T" });
+
+    const p1 = createPrompt(db, { name: "p1", content: "Hello world" });
+    const p2 = createPrompt(db, { name: "p2", content: "another prompt body" });
+    addTaskPrompt(db, t.id, p1.id, "direct");
+    setBoardPrompts(db, b.id, [p2.id]);
+
+    const ctx = resolveTaskContext(db, t.id)!;
+    // Per-prompt counts come from the cached column.
+    for (const p of ctx.prompts) {
+      expect(typeof p.token_count).toBe("number");
+      expect(p.token_count).toBeGreaterThan(0);
+    }
+    // total_token_count must equal the sum of resolved prompt counts.
+    const expectedTotal = ctx.prompts.reduce((s, p) => s + p.token_count, 0);
+    expect(ctx.total_token_count).toBe(expectedTotal);
+    expect(ctx.total_token_count).toBe(p1.token_count + p2.token_count);
+  });
 });

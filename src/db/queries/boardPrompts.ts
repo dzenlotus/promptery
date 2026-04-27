@@ -7,14 +7,15 @@ import type { Prompt } from "./prompts.js";
  * before anyone manually positions rows.
  */
 export function listBoardPrompts(db: Database, boardId: string): Prompt[] {
-  return db
+  const rows = db
     .prepare(
       `SELECT p.* FROM prompts p
        JOIN board_prompts bp ON bp.prompt_id = p.id
        WHERE bp.board_id = ?
        ORDER BY bp.position ASC, p.name ASC`
     )
-    .all(boardId) as Prompt[];
+    .all(boardId) as Array<Omit<Prompt, "token_count"> & { token_count: number | null }>;
+  return rows.map((r) => ({ ...r, token_count: r.token_count ?? 0 }));
 }
 
 /**

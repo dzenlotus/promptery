@@ -31,6 +31,10 @@ interface Props {
   onDuplicate: () => void;
   onDelete: () => void;
   testIdPrefix: string;
+  /** Optional trailing slot — used by prompts to render a TokenBadge.
+   *  Sits between the name and the kebab menu, hidden while renaming so
+   *  the input has the full row width. */
+  trailing?: React.ReactNode;
 }
 
 /**
@@ -49,6 +53,7 @@ export function EntityRow({
   onDuplicate,
   onDelete,
   testIdPrefix,
+  trailing,
 }: Props) {
   const [renameValue, setRenameValue] = useState(item.name);
   const renameRef = useRef<HTMLInputElement>(null);
@@ -91,7 +96,7 @@ export function EntityRow({
         }
       }}
       className={cn(
-        "group relative grid grid-cols-[auto_1fr_auto] items-center gap-2 h-9 pr-2 pl-3 rounded-md cursor-pointer",
+        "group relative grid grid-cols-[auto_1fr_auto_auto] items-center gap-2 h-9 pr-2 pl-3 rounded-md cursor-pointer",
         "transition-colors duration-150 select-none",
         selected
           ? "bg-[var(--color-accent-soft)] text-[var(--color-text)]"
@@ -115,6 +120,14 @@ export function EntityRow({
         />
       ) : (
         <span className="truncate text-[13px] tracking-tight">{item.name}</span>
+      )}
+
+      {/* Token badge / other trailing slot. Hidden while renaming so the
+          input has room to breathe. */}
+      {trailing && !isRenaming ? (
+        <div className="shrink-0">{trailing}</div>
+      ) : (
+        <span aria-hidden />
       )}
 
       <div

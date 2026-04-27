@@ -59,6 +59,7 @@ describe("buildContextBundle", () => {
             content: "write comments in English",
             color: "#888",
             short_description: null,
+            token_count: 0,
             created_at: 0,
             updated_at: 0,
             origin: "role:role1",
@@ -139,6 +140,7 @@ describe("buildContextBundle", () => {
             content: "x",
             color: "#888",
             short_description: null,
+            token_count: 0,
             created_at: 0,
             updated_at: 0,
             origin: "role:r1",
@@ -149,6 +151,7 @@ describe("buildContextBundle", () => {
             content: "y",
             color: "#888",
             short_description: null,
+            token_count: 0,
             created_at: 0,
             updated_at: 0,
             origin: "direct",
@@ -211,6 +214,7 @@ describe("buildContextBundle", () => {
           content: "body",
           color: null,
           short_description: "Quick summary.",
+          token_count: 0,
           origin: "direct",
         },
         {
@@ -219,9 +223,11 @@ describe("buildContextBundle", () => {
           content: "body2",
           color: null,
           short_description: null,
+          token_count: 0,
           origin: "direct",
         },
       ],
+      total_token_count: 0,
     };
     const xml = buildContextBundle(makeTask(), ctx);
     expect(xml).toContain('<prompt name="with-desc" desc="Quick summary.">');
@@ -276,10 +282,12 @@ describe("buildContextBundle — bug #15 regression", () => {
           name: "role-p1",
           content: "role content",
           color: null,
+          token_count: 0,
           origin: "board-role",
           source: { type: "board-role", id: "R_board", name: "board-maintainer" },
         },
       ],
+      total_token_count: 0,
     };
     const xml = buildContextBundle(makeTask(), ctx);
     const matches = xml.match(/role-p1/g) ?? [];
@@ -308,6 +316,7 @@ describe("buildContextBundle — bug #15 regression", () => {
           name: "task-role-p",
           content: "task-role content",
           color: null,
+          token_count: 0,
           origin: "role",
           source: { type: "role", id: "R_task", name: "task-role" },
         },
@@ -316,6 +325,7 @@ describe("buildContextBundle — bug #15 regression", () => {
           name: "board-role-p",
           content: "board-role content",
           color: null,
+          token_count: 0,
           origin: "board-role",
           source: { type: "board-role", id: "R_board", name: "board-role" },
         },
@@ -324,10 +334,12 @@ describe("buildContextBundle — bug #15 regression", () => {
           name: "board-direct",
           content: "board-direct content",
           color: null,
+          token_count: 0,
           origin: "board",
           source: { type: "board", id: "b1", name: "board" },
         },
       ],
+      total_token_count: 0,
     };
     const xml = buildContextBundle(makeTask(), ctx);
 
@@ -361,10 +373,12 @@ describe("buildContextBundle — bug #15 regression", () => {
           name: "col-role-p",
           content: "col-role content",
           color: null,
+          token_count: 0,
           origin: "column-role",
           source: { type: "column-role", id: "R_col", name: "col-role" },
         },
       ],
+      total_token_count: 0,
     };
     const xml = buildContextBundle(makeTask(), ctx);
     expect((xml.match(/col-role-p/g) ?? []).length).toBe(1);
@@ -387,6 +401,7 @@ describe("buildContextBundle — bug #15 regression", () => {
           name: "direct-p",
           content: "direct",
           color: null,
+          token_count: 0,
           origin: "direct",
         },
         {
@@ -394,6 +409,7 @@ describe("buildContextBundle — bug #15 regression", () => {
           name: "role-p",
           content: "role",
           color: null,
+          token_count: 0,
           origin: "role",
           source: { type: "role", id: "R_task", name: "task-role" },
         },
@@ -402,6 +418,7 @@ describe("buildContextBundle — bug #15 regression", () => {
           name: "col-p",
           content: "col",
           color: null,
+          token_count: 0,
           origin: "column",
           source: { type: "column", id: "C", name: "col" },
         },
@@ -410,6 +427,7 @@ describe("buildContextBundle — bug #15 regression", () => {
           name: "col-role-p",
           content: "col-role",
           color: null,
+          token_count: 0,
           origin: "column-role",
           source: { type: "column-role", id: "R_col", name: "col-role" },
         },
@@ -418,6 +436,7 @@ describe("buildContextBundle — bug #15 regression", () => {
           name: "board-p",
           content: "board",
           color: null,
+          token_count: 0,
           origin: "board",
           source: { type: "board", id: "B", name: "board" },
         },
@@ -426,10 +445,12 @@ describe("buildContextBundle — bug #15 regression", () => {
           name: "board-role-p",
           content: "board-role",
           color: null,
+          token_count: 0,
           origin: "board-role",
           source: { type: "board-role", id: "R_board", name: "board-role" },
         },
       ],
+      total_token_count: 0,
     };
     const xml = buildContextBundle(makeTask(), ctx);
     for (const name of [

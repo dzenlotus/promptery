@@ -138,7 +138,7 @@ export function BoardMoveDialog({ task, sourceBoardId, open, onClose }: Props) {
     <Dialog
       open={open}
       onOpenChange={(o) => !o && onClose()}
-      title={`Move task #${task.number} to another board`}
+      title={`Move task ${task.slug} to another board`}
       size="md"
       footer={step === 1 ? footerStep1 : footerStep2}
       data-testid="board-move-dialog"

@@ -10,6 +10,8 @@ import {
 import { IconButton } from "../ui/IconButton.js";
 import { usePromptGroups } from "../../hooks/usePromptGroups.js";
 import { useLocalStorage } from "../../hooks/useLocalStorage.js";
+import { useTokenBadgeConfig } from "../../hooks/useTokenBadge.js";
+import { TokenBadge } from "../common/TokenBadge.js";
 import { cn } from "../../lib/cn.js";
 import type { PromptGroup } from "../../lib/types.js";
 
@@ -107,6 +109,7 @@ interface RowProps {
 
 function PromptGroupRow({ group, active, onSelect, onEdit, onDelete }: RowProps) {
   const color = group.color || "#7a746a";
+  const tokenCfg = useTokenBadgeConfig();
   return (
     <div
       role="button"
@@ -120,7 +123,9 @@ function PromptGroupRow({ group, active, onSelect, onEdit, onDelete }: RowProps)
         }
       }}
       className={cn(
-        "group grid grid-cols-[16px_1fr_auto_24px] items-center gap-2 h-8 px-3 rounded-md cursor-pointer",
+        // Extra column for the optional token badge — slot collapses to
+        // zero when tokens are disabled so layout doesn't shift.
+        "group grid grid-cols-[16px_1fr_auto_auto_24px] items-center gap-2 h-8 px-3 rounded-md cursor-pointer",
         "transition-colors duration-150",
         active
           ? "bg-[var(--color-accent-soft)] text-[var(--color-text)]"
@@ -132,6 +137,16 @@ function PromptGroupRow({ group, active, onSelect, onEdit, onDelete }: RowProps)
       <span className="text-[11px] tabular-nums text-[var(--color-text-subtle)]">
         {group.prompt_count}
       </span>
+      {tokenCfg.enabled ? (
+        <TokenBadge
+          count={group.token_count ?? 0}
+          thresholds={tokenCfg.thresholds}
+          size="xs"
+          testId={`prompt-group-token-badge-${group.id}`}
+        />
+      ) : (
+        <span aria-hidden />
+      )}
       <div className="opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100 transition-opacity">
         <DropdownMenu>
           <DropdownTrigger asChild>

@@ -47,6 +47,11 @@ CREATE TABLE IF NOT EXISTS prompts (
   content TEXT NOT NULL DEFAULT '',
   color TEXT DEFAULT '#888',
   short_description TEXT,
+  -- Cached cl100k_base token count for `content`. Re-computed on every
+  -- create/update inside the same transaction (see queries/prompts.ts) and
+  -- backfilled by migration 014 on existing rows. NULL only on legacy DBs
+  -- between schema-first init and migration apply.
+  token_count INTEGER,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );

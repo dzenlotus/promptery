@@ -1,4 +1,4 @@
-import { Database, Palette } from "lucide-react";
+import { Database, Hash, Palette } from "lucide-react";
 import { useLocation } from "wouter";
 import { SidebarSection } from "../../layout/SidebarSection.js";
 import { cn } from "../../lib/cn.js";
@@ -13,6 +13,7 @@ interface Item {
 const ITEMS: Item[] = [
   { href: "/settings/data", label: "Data", icon: Database, testId: "settings-nav-data" },
   { href: "/settings/appearance", label: "Appearance", icon: Palette, testId: "settings-nav-appearance" },
+  { href: "/settings/tokens", label: "Tokens", icon: Hash, testId: "settings-nav-tokens" },
 ];
 
 export function SettingsSidebar() {

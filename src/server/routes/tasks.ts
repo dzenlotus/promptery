@@ -343,6 +343,9 @@ tasksRoute.post(
     const column = q.getColumn(getDb(), column_id);
     if (!column) return c.json({ error: "column not found" }, 404);
 
+    const oldBoardId = existing.board_id;
+    const oldColumnId = existing.column_id;
+
     const moved = q.moveTaskWithResolution(getDb(), id, {
       targetColumnId: column_id,
       targetPosition: position,
@@ -355,9 +358,11 @@ tasksRoute.post(
     bus.publish({
       type: "task.moved",
       data: {
-        boardId: moved.board_id,
         taskId: moved.id,
-        columnId: column_id,
+        oldBoardId,
+        newBoardId: moved.board_id,
+        oldColumnId,
+        newColumnId: column_id,
         position: moved.position,
       },
     });

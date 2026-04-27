@@ -17,6 +17,7 @@ function role(id: string, name: string, prompts: Prompt[] = []): RoleWithRelatio
     prompts,
     skills: [],
     mcp_tools: [],
+    token_count: prompts.reduce((sum, p) => sum + (p.token_count ?? 0), 0),
   };
 }
 
@@ -30,6 +31,7 @@ function prompt(id: string, name = id): Prompt {
     name,
     content: "",
     color: "#888",
+    token_count: 0,
     created_at: 0,
     updated_at: 0,
   };

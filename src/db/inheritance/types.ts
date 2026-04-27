@@ -42,6 +42,9 @@ export interface ResolvedPrompt {
   content: string;
   color: string | null;
   short_description?: string | null;
+  /** Cached cl100k_base token count for `content`. Aggregated by callers
+   *  into the bundle-level `total_token_count`. */
+  token_count: number;
   origin: PromptOrigin;
   /** Non-null for every origin except "direct". Surfaces the carrier's name
    * so the UI can show "inherited from Backend Engineer role" tooltips. */
@@ -76,4 +79,7 @@ export interface ResolvedTaskContext {
    * typically ignore this field.
    */
   disabled_prompts?: string[];
+  /** Sum of token_count across all resolved prompts (post-dedup, post-override).
+   *  Drives the task bundle badge — single number callers can render directly. */
+  total_token_count: number;
 }

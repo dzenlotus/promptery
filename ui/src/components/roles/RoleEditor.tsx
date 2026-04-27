@@ -3,7 +3,10 @@ import { MilkdownEditor } from "../editor/MilkdownEditor.js";
 import { Button } from "../ui/Button.js";
 import { HeaderColorPicker } from "../sidebar/HeaderColorPicker.js";
 import { PromptsMultiSelector } from "../common/PromptsMultiSelector.js";
+import { TokenBadge } from "../common/TokenBadge.js";
+import { useTokenBadgeConfig } from "../../hooks/useTokenBadge.js";
 import { usePromptGroups } from "../../hooks/usePromptGroups.js";
+import { usePrompts } from "../../hooks/usePrompts.js";
 import { DRAFT_COLOR } from "../sidebar/colors.js";
 import { paletteColorForName } from "../../lib/palette.js";
 import { cn } from "../../lib/cn.js";
@@ -96,6 +99,18 @@ export function RoleEditor({
   // Groups surface in the prompt picker as fully-covered chips / popover
   // shortcuts — same semantics as the board/column selectors.
   const { data: groups = [] } = usePromptGroups();
+  // Live token total — sums the cached count of every currently-selected
+  // prompt so adding / removing one updates the badge without a save.
+  const { data: allPromptsForBadge = [] } = usePrompts();
+  const tokenCfg = useTokenBadgeConfig();
+  const liveTokenTotal = useMemo(() => {
+    if (!tokenCfg.enabled) return 0;
+    const byId = new Map(allPromptsForBadge.map((p) => [p.id, p]));
+    return localPromptIds.reduce(
+      (sum, id) => sum + (byId.get(id)?.token_count ?? 0),
+      0
+    );
+  }, [tokenCfg.enabled, allPromptsForBadge, localPromptIds]);
   const [saving, setSaving] = useState(false);
   const [hasTyped, setHasTyped] = useState(false);
   const [attemptedSave, setAttemptedSave] = useState(false);
@@ -246,9 +261,20 @@ export function RoleEditor({
       <div className="min-h-0 min-w-0 overflow-y-auto scroll-thin px-8 py-6">
         <div className="grid gap-6">
           <div className="grid gap-1.5">
-            <span className="text-[10px] uppercase tracking-[0.1em] font-medium text-[var(--color-text-subtle)]">
-              Default prompts
-            </span>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase tracking-[0.1em] font-medium text-[var(--color-text-subtle)]">
+                Default prompts
+              </span>
+              {tokenCfg.enabled && localPromptIds.length > 0 ? (
+                <TokenBadge
+                  count={liveTokenTotal}
+                  thresholds={tokenCfg.thresholds}
+                  size="sm"
+                  testId="role-default-prompts-token-total"
+                  title={`Total ${liveTokenTotal.toLocaleString()} tokens across ${localPromptIds.length} prompt${localPromptIds.length === 1 ? "" : "s"}`}
+                />
+              ) : null}
+            </div>
             <PromptsMultiSelector
               allPrompts={allPrompts}
               allGroups={groups}

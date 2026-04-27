@@ -59,18 +59,33 @@ export interface Prompt {
    *  existing fixtures and Role/Skill/McpTool aliases (which don't
    *  surface this field in the UI today) keep compiling. */
   short_description?: string | null;
+  /** Cached cl100k_base token count of `content`. Re-computed on every
+   *  prompt write — sidebars / dialogs surface it via `<TokenBadge />`. */
+  token_count?: number;
   created_at: number;
   updated_at: number;
 }
 
 export type Skill = Prompt;
 export type McpTool = Prompt;
-export type Role = Prompt;
+// Role lives in its own table — it has no token_count column itself; the
+// surfaced badge sums over `prompts` (see RoleWithRelations.token_count).
+export interface Role {
+  id: string;
+  name: string;
+  content: string;
+  color: string;
+  created_at: number;
+  updated_at: number;
+}
 
 export interface RoleWithRelations extends Role {
   prompts: Prompt[];
   skills: Skill[];
   mcp_tools: McpTool[];
+  /** Sum of `token_count` across the role's default prompts. Server-side
+   *  computed so the badge has no work to do. */
+  token_count?: number;
 }
 
 /** Origin marker: "direct" when user attached it, "role:<id>" when inherited. */
@@ -155,6 +170,9 @@ export interface PromptGroup {
   created_at: number;
   updated_at: number;
   prompt_count: number;
+  /** Sum of cl100k_base token counts across every member prompt — server
+   *  computes it on the fly from the cached per-prompt counts. */
+  token_count?: number;
   /** Member prompt ids in group-position order. Every list/get response
    *  includes this so the multi-select can compute "group fully covered"
    *  without a second round trip. */
@@ -167,6 +185,7 @@ export interface PromptInGroup {
   content: string;
   color: string | null;
   short_description?: string | null;
+  token_count?: number;
   position: number;
 }
 
@@ -219,6 +238,8 @@ export interface ResolvedPrompt {
   name: string;
   content: string;
   color: string | null;
+  /** Cached token count for `content`. */
+  token_count?: number;
   origin: PromptOrigin;
   source?: ResolvedPromptSource;
 }
@@ -244,6 +265,9 @@ export interface ResolvedTaskContext {
    * Optional for backwards compatibility — older servers may omit it.
    */
   disabled_prompts?: string[];
+  /** Sum of token_count across every resolved prompt — drives the badge in
+   *  the task dialog's bundle preview. */
+  total_token_count: number;
 }
 
 export interface BackupInfo {

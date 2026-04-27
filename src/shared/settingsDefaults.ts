@@ -24,6 +24,16 @@ export const SETTINGS_DEFAULTS = {
   "behavior.language": "en" as "en" | "ru",
 
   "data.backups.autoKeepDays": 30 as number,
+
+  // Token-count badge controls (task #20). When `enabled` is false, every
+  // TokenBadge call site is a no-op so power users who don't care about
+  // token spend can hide them entirely. The three thresholds drive the
+  // badge's green→yellow→orange→red colour ladder.
+  "tokens.enabled": true as boolean,
+  "tokens.threshold_yellow": 5000 as number,
+  "tokens.threshold_orange": 15000 as number,
+  "tokens.threshold_red": 30000 as number,
+  "tokens.tokenizer": "cl100k_base" as "cl100k_base",
 } as const;
 
 export type SettingKey = keyof typeof SETTINGS_DEFAULTS;

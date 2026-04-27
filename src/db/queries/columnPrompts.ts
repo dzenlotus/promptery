@@ -2,14 +2,15 @@ import type { Database } from "better-sqlite3";
 import type { Prompt } from "./prompts.js";
 
 export function listColumnPrompts(db: Database, columnId: string): Prompt[] {
-  return db
+  const rows = db
     .prepare(
       `SELECT p.* FROM prompts p
        JOIN column_prompts cp ON cp.prompt_id = p.id
        WHERE cp.column_id = ?
        ORDER BY cp.position ASC, p.name ASC`
     )
-    .all(columnId) as Prompt[];
+    .all(columnId) as Array<Omit<Prompt, "token_count"> & { token_count: number | null }>;
+  return rows.map((r) => ({ ...r, token_count: r.token_count ?? 0 }));
 }
 
 /**

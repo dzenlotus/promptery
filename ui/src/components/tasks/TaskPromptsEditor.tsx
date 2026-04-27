@@ -175,7 +175,7 @@ export function TaskPromptsEditor({
           : undefined;
         const baseTooltip = onToggleDisabled
           ? tooltipFor(disabled)
-          : inheritedTooltip;
+          : baseInheritedTooltip;
         return (
           <Chip
             key={`inh-${it.id}`}

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { nanoid } from "nanoid";
 import { DEFAULT_COLUMN_NAMES } from "./queries/boards.js";
 import { getBackupsDir } from "../lib/paths.js";
+import { countTokens } from "../lib/tokenCount.js";
 
 /**
  * Simple file-less migration system.
@@ -40,6 +41,7 @@ export function runMigrations(db: Database, opts: RunMigrationsOptions = {}): vo
   runMigration(db, "011_prompt_short_description", apply011PromptShortDescription);
   runMigration(db, "012_task_events", apply012TaskEvents);
   runMigration(db, "013_prompt_tags", apply013PromptTags);
+  runMigration(db, "014_prompt_token_count", apply014TokenCount);
   runMigration(db, "015_task_prompt_overrides", apply015TaskPromptOverrides);
   backfillDefaultColumnsForEmptyBoards(db);
 }
@@ -551,6 +553,31 @@ function apply011PromptShortDescription(db: Database): void {
   const cols = db.prepare("PRAGMA table_info(prompts)").all() as { name: string }[];
   if (!cols.some((c) => c.name === "short_description")) {
     db.exec("ALTER TABLE prompts ADD COLUMN short_description TEXT");
+  }
+}
+
+/**
+ * Apply 014: add prompts.token_count and backfill existing rows.
+ *
+ * The ALTER is guarded by a column-presence check so fresh installs (where
+ * schema.sql already declares the column) don't double-add. Backfill walks
+ * every prompt with `token_count IS NULL` and stores the cl100k_base count
+ * inline; idempotent because re-runs see the column populated.
+ */
+function apply014TokenCount(db: Database): void {
+  const cols = db.prepare("PRAGMA table_info(prompts)").all() as { name: string }[];
+  if (!cols.some((c) => c.name === "token_count")) {
+    db.exec("ALTER TABLE prompts ADD COLUMN token_count INTEGER");
+  }
+
+  const rows = db
+    .prepare("SELECT id, content FROM prompts WHERE token_count IS NULL")
+    .all() as { id: string; content: string }[];
+  if (rows.length === 0) return;
+
+  const update = db.prepare("UPDATE prompts SET token_count = ? WHERE id = ?");
+  for (const row of rows) {
+    update.run(countTokens(row.content), row.id);
   }
 }
 

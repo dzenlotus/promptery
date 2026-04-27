@@ -8,6 +8,7 @@ function prompt(id: string): Prompt {
     name: id,
     content: "",
     color: "#888",
+    token_count: 0,
     created_at: 0,
     updated_at: 0,
   };
@@ -22,6 +23,7 @@ function group(id: string, members: string[], name = id): PromptGroup {
     created_at: 0,
     updated_at: 0,
     prompt_count: members.length,
+    token_count: 0,
     member_ids: members,
   };
 }
@@ -105,6 +107,7 @@ describe("breakdownAttachments", () => {
       created_at: 0,
       updated_at: 0,
       prompt_count: 2,
+      token_count: 0,
       // Older hub builds don't populate this field.
       member_ids: undefined as unknown as string[],
     };

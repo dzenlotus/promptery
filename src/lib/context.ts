@@ -99,6 +99,7 @@ function synthesiseFromTask(task: TaskWithRelations): ResolvedTaskContext {
       content: p.content,
       color: p.color ?? null,
       short_description: p.short_description ?? null,
+      token_count: p.token_count,
       origin: isRoleInherited ? "role" : "direct",
     };
     // Keep a source pointer when the origin carries one so the role-section
@@ -109,7 +110,8 @@ function synthesiseFromTask(task: TaskWithRelations): ResolvedTaskContext {
     return base;
   });
 
-  return { task_id: task.id, role, prompts };
+  const total_token_count = prompts.reduce((sum, p) => sum + p.token_count, 0);
+  return { task_id: task.id, role, prompts, total_token_count };
 }
 
 function renderRoleSection(
