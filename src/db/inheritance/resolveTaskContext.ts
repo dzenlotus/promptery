@@ -7,6 +7,7 @@ import {
   type ResolvedRole,
   type ResolvedTaskContext,
 } from "./types.js";
+import { listOverrides, listDisabledPromptIds } from "../queries/taskPromptOverrides.js";
 
 interface TaskJoinRow {
   id: string;
@@ -75,8 +76,9 @@ export function resolveTaskContext(
 
   const role = resolveActiveRole(db, task);
   const prompts = resolvePrompts(db, task, role);
+  const disabled_prompts = listDisabledPromptIds(db, taskId);
 
-  return { task_id: taskId, role, prompts };
+  return { task_id: taskId, role, prompts, disabled_prompts };
 }
 
 function resolveActiveRole(db: Database, task: TaskJoinRow): ResolvedRole | null {
@@ -223,10 +225,21 @@ function resolvePrompts(
     }
   }
 
+  // Per-task overrides: a row with enabled=0 suppresses an inherited prompt
+  // for this task only. Applied AFTER dedup so the user only ever toggles a
+  // single resolved entry, never multiple origins of the same prompt. Rows
+  // for prompts not in the union are silently ignored (stale-override rule).
+  const overrides = listOverrides(db, task.id);
+  const filtered: CollectedPrompt[] = [];
+  for (const p of byId.values()) {
+    if (overrides.get(p.id) === 0) continue;
+    filtered.push(p);
+  }
+
   // Sort: specificity desc (direct first), then position asc, then name asc
   // as a deterministic tiebreaker. Position comes from the join-table column
   // that tracks per-attachment ordering within each origin layer.
-  return Array.from(byId.values())
+  return filtered
     .sort((a, b) => {
       const specDiff = ORIGIN_SPECIFICITY[b.origin] - ORIGIN_SPECIFICITY[a.origin];
       if (specDiff !== 0) return specDiff;

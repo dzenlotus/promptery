@@ -6,6 +6,7 @@ import type { Column } from "./columns.js";
 import { listTaskPrompts, type TaskPrompt } from "./taskPrompts.js";
 import { listTaskSkills, type TaskSkill } from "./taskSkills.js";
 import { listTaskMcpTools, type TaskMcpTool } from "./taskMcpTools.js";
+import { listDisabledPromptIds } from "./taskPromptOverrides.js";
 
 export interface Task {
   id: string;
@@ -38,6 +39,13 @@ export interface TaskWithRelations extends Task {
   prompts: TaskPrompt[];
   skills: TaskSkill[];
   mcp_tools: TaskMcpTool[];
+  /**
+   * Prompt ids the user explicitly disabled for this task via the per-task
+   * override system. UI uses these to render greyed-out chips on inherited
+   * prompts. The full effective list (with overrides applied) is computed by
+   * the resolver — this field is just the raw "switched off" set.
+   */
+  disabled_prompts: string[];
 }
 
 export interface CreateTaskInput {
@@ -68,6 +76,7 @@ function attachRelations(db: Database, task: Task): TaskWithRelations {
     prompts: listTaskPrompts(db, task.id),
     skills: listTaskSkills(db, task.id),
     mcp_tools: listTaskMcpTools(db, task.id),
+    disabled_prompts: listDisabledPromptIds(db, task.id),
   };
 }
 

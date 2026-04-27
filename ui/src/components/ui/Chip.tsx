@@ -9,6 +9,12 @@ interface Props extends Omit<HTMLAttributes<HTMLSpanElement>, "children"> {
   onRemove?: () => void;
   size?: "sm" | "md";
   inherited?: boolean;
+  /**
+   * Visual-only modifier. When true, render the chip with stronger muting
+   * and a strike-through label so the user sees the prompt is suppressed
+   * for the current task. Used by the per-task prompt-override toggle.
+   */
+  disabled?: boolean;
   tooltip?: string;
   "data-testid"?: string;
 }
@@ -26,9 +32,11 @@ export const Chip = forwardRef<HTMLSpanElement, Props>(function Chip(
     onRemove,
     size = "md",
     inherited,
+    disabled,
     tooltip,
     className,
     style,
+    onClick,
     "data-testid": testId,
     ...rest
   },
@@ -38,15 +46,20 @@ export const Chip = forwardRef<HTMLSpanElement, Props>(function Chip(
   const sizeCls =
     size === "sm" ? "h-5 px-1.5 gap-1 text-[11px]" : "h-6 px-2 gap-1.5 text-[12px]";
   const mergedStyle: CSSProperties = { borderColor: `${tint}55`, ...style };
+  const isClickable = inherited && typeof onClick === "function";
   const chipEl = (
     <span
       ref={ref}
       data-testid={testId}
+      onClick={onClick}
       className={cn(
         "inline-flex items-center rounded-full bg-[var(--hover-overlay)] text-[var(--color-text)]",
         "border border-[var(--color-border)]",
         "tabular-nums tracking-tight shrink-0 whitespace-nowrap",
-        inherited && "opacity-60 cursor-default",
+        inherited && !disabled && "opacity-60",
+        inherited && !isClickable && "cursor-default",
+        isClickable && "cursor-pointer hover:bg-[var(--color-border)]",
+        disabled && "opacity-40",
         sizeCls,
         className
       )}
@@ -58,7 +71,7 @@ export const Chip = forwardRef<HTMLSpanElement, Props>(function Chip(
         className="inline-block h-[6px] w-[6px] rounded-full shrink-0"
         style={{ backgroundColor: tint }}
       />
-      <span className="truncate">{name}</span>
+      <span className={cn("truncate", disabled && "line-through")}>{name}</span>
       {onRemove && !inherited ? (
         <button
           type="button"

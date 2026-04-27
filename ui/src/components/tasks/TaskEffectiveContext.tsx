@@ -20,6 +20,9 @@ interface Props {
   localRoleId: string | null;
   /** Staged direct-prompt ids on the task. */
   localDirectIds: string[];
+  /** Staged per-task prompt-override disable set. Each id is rendered
+   *  with the strike-through "disabled by user" treatment in the preview. */
+  localDisabledIds?: string[];
   /** Prompt catalogue, used for name / colour / content lookup. */
   allPrompts: Prompt[];
 }
@@ -46,6 +49,7 @@ export function TaskEffectiveContext({
   columnId,
   localRoleId,
   localDirectIds,
+  localDisabledIds,
   allPrompts,
 }: Props) {
   const promptById = useMemo(
@@ -72,6 +76,7 @@ export function TaskEffectiveContext({
       buildLayeredInheritance({
         localRoleId,
         localDirectIds,
+        localDisabledIds,
         taskRoleDetail: taskRoleQ.data ?? null,
         column: {
           role: column?.role ?? null,
@@ -87,6 +92,7 @@ export function TaskEffectiveContext({
     [
       localRoleId,
       localDirectIds,
+      localDisabledIds,
       taskRoleQ.data,
       column?.role,
       column?.prompts,

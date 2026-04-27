@@ -11,10 +11,16 @@ const assets = [
   ["src/db/migrations/006_inheritance.sql", "dist/db/migrations/006_inheritance.sql"],
   ["src/db/migrations/007_prompt_groups.sql", "dist/db/migrations/007_prompt_groups.sql"],
   ["src/db/migrations/008_tasks_fts.sql", "dist/db/migrations/008_tasks_fts.sql"],
+<<<<<<< HEAD
   ["src/db/migrations/009_spaces.sql", "dist/db/migrations/009_spaces.sql"],
   [
     "src/db/migrations/010_board_position.sql",
     "dist/db/migrations/010_board_position.sql",
+=======
+  [
+    "src/db/migrations/015_task_prompt_overrides.sql",
+    "dist/db/migrations/015_task_prompt_overrides.sql",
+>>>>>>> a676c6a (feat(tasks): per-task prompt enable/disable overrides)
   ],
 ];
 

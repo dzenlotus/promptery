@@ -82,6 +82,7 @@ export function TaskDialog(props: Props) {
   const [description, setDescription] = useState("");
   const [localRoleId, setLocalRoleId] = useState<string | null>(null);
   const [localDirectIds, setLocalDirectIds] = useState<string[]>([]);
+  const [localDisabledIds, setLocalDisabledIds] = useState<string[]>([]);
   const [editorKey, setEditorKey] = useState(0);
   const [saving, setSaving] = useState(false);
 
@@ -99,11 +100,13 @@ export function TaskDialog(props: Props) {
       setLocalDirectIds(
         editTask.prompts.filter((p) => p.origin === "direct").map((p) => p.id)
       );
+      setLocalDisabledIds(editTask.disabled_prompts ?? []);
     } else if (mode === "create") {
       setTitle("");
       setDescription("");
       setLocalRoleId(null);
       setLocalDirectIds([]);
+      setLocalDisabledIds([]);
     }
     setEditorKey((k) => k + 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -119,9 +122,16 @@ export function TaskDialog(props: Props) {
         directIds: editTask.prompts
           .filter((p) => p.origin === "direct")
           .map((p) => p.id),
+        disabledIds: editTask.disabled_prompts ?? [],
       };
     }
-    return { title: "", description: "", roleId: null, directIds: [] as string[] };
+    return {
+      title: "",
+      description: "",
+      roleId: null,
+      directIds: [] as string[],
+      disabledIds: [] as string[],
+    };
   }, [mode, editTask]);
 
   // --- Inherited prompts preview --------------------------------------------
@@ -144,9 +154,18 @@ export function TaskDialog(props: Props) {
       title !== baseline.title ||
       description !== baseline.description ||
       localRoleId !== baseline.roleId ||
-      !arraysEqual(localDirectIds, baseline.directIds)
+      !arraysEqual(localDirectIds, baseline.directIds) ||
+      !arraysEqual(localDisabledIds, baseline.disabledIds)
     );
-  }, [mode, title, description, localRoleId, localDirectIds, baseline]);
+  }, [
+    mode,
+    title,
+    description,
+    localRoleId,
+    localDirectIds,
+    localDisabledIds,
+    baseline,
+  ]);
 
   const disabled = !title.trim() || saving || (mode === "edit" && !isDirty);
 
@@ -168,6 +187,13 @@ export function TaskDialog(props: Props) {
         // Attachments run sequentially to preserve insertion order.
         for (const pid of localDirectIds) {
           await api.tasks.addPrompt(created.id, pid);
+        }
+        // Per-task disable overrides — only the inherited prompts the user
+        // toggled off via the inherited-chip click. In create mode these can
+        // exist if the user picked a role with prompts and then disabled
+        // some of them before saving.
+        for (const pid of localDisabledIds) {
+          await api.tasks.setPromptOverride(created.id, pid, 0);
         }
         toast.success("Task created");
       } else {
@@ -191,6 +217,20 @@ export function TaskDialog(props: Props) {
         for (const added of localDirectIds) {
           if (!origSet.has(added)) {
             await api.tasks.addPrompt(id, added);
+          }
+        }
+        // Diff per-task prompt overrides — additions become PUT enabled=0,
+        // removals become DELETE. Skipped when nothing changed in this set.
+        const origDisabled = new Set(baseline.disabledIds);
+        const localDisabled = new Set(localDisabledIds);
+        for (const removed of baseline.disabledIds) {
+          if (!localDisabled.has(removed)) {
+            await api.tasks.deletePromptOverride(id, removed);
+          }
+        }
+        for (const added of localDisabledIds) {
+          if (!origDisabled.has(added)) {
+            await api.tasks.setPromptOverride(id, added, 0);
           }
         }
         // TODO: persist ordering when the backend exposes a reorder endpoint.
@@ -258,6 +298,14 @@ export function TaskDialog(props: Props) {
             inheritedItems={inheritedPrompts}
             directIds={localDirectIds}
             onDirectChange={setLocalDirectIds}
+            disabledPromptIds={localDisabledIds}
+            onToggleDisabled={(promptId, currentlyDisabled) => {
+              setLocalDisabledIds((prev) =>
+                currentlyDisabled
+                  ? prev.filter((id) => id !== promptId)
+                  : [...prev, promptId]
+              );
+            }}
             roleName={selectedRoleName}
             onOpenPrompt={
               mode === "edit"
@@ -298,6 +346,7 @@ export function TaskDialog(props: Props) {
             }
             localRoleId={localRoleId}
             localDirectIds={localDirectIds}
+            localDisabledIds={localDisabledIds}
             allPrompts={allPrompts}
           />
         </Field>

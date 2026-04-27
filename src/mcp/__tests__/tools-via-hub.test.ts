@@ -44,6 +44,7 @@ describe("tools registry", () => {
       "set_task_role",
       "add_task_prompt",
       "remove_task_prompt",
+      "set_task_prompt_override",
       "list_roles",
       "get_role",
       "create_role",
@@ -174,6 +175,62 @@ describe("tasks + role inheritance via hub", () => {
     const bundle = await call<string>("get_task_bundle", { id: task.id });
     expect(bundle).toContain("direct-helper-content");
     expect(bundle).toContain("<direct_prompts>");
+  });
+});
+
+describe("set_task_prompt_override via hub", () => {
+  it("disables an inherited prompt then clears the override", async () => {
+    const board = await call<{ id: string }>("create_board", { name: "override-flow" });
+    const full = await call<{ column_ids: string[] }>("get_board", { id: board.id });
+    const prompt = await call<{ id: string }>("create_prompt", {
+      name: "override-p",
+      content: "noisy",
+    });
+    const role = await call<{ id: string }>("create_role", { name: "override-role" });
+    await call("set_role_prompts", { role_id: role.id, prompt_ids: [prompt.id] });
+
+    const task = await call<{ id: string }>("create_task", {
+      board_id: board.id,
+      column_id: full.column_ids[0]!,
+      title: "T",
+      role_id: role.id,
+    });
+
+    // Baseline — inherited prompt is in the resolved context.
+    const ctxBefore = await call<{
+      prompts: Array<{ id: string }>;
+      disabled_prompts: string[];
+    }>("get_task_context", { id: task.id });
+    expect(ctxBefore.prompts.some((p) => p.id === prompt.id)).toBe(true);
+    expect(ctxBefore.disabled_prompts).toEqual([]);
+
+    // Disable.
+    await call("set_task_prompt_override", {
+      task_id: task.id,
+      prompt_id: prompt.id,
+      enabled: 0,
+    });
+
+    const ctxDisabled = await call<{
+      prompts: Array<{ id: string }>;
+      disabled_prompts: string[];
+    }>("get_task_context", { id: task.id });
+    expect(ctxDisabled.prompts.some((p) => p.id === prompt.id)).toBe(false);
+    expect(ctxDisabled.disabled_prompts).toEqual([prompt.id]);
+
+    // Clear (enabled=null is the documented "drop the override" form).
+    await call("set_task_prompt_override", {
+      task_id: task.id,
+      prompt_id: prompt.id,
+      enabled: null,
+    });
+
+    const ctxRestored = await call<{
+      prompts: Array<{ id: string }>;
+      disabled_prompts: string[];
+    }>("get_task_context", { id: task.id });
+    expect(ctxRestored.prompts.some((p) => p.id === prompt.id)).toBe(true);
+    expect(ctxRestored.disabled_prompts).toEqual([]);
   });
 });
 

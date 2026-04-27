@@ -62,4 +62,18 @@ export interface ResolvedTaskContext {
   task_id: string;
   role: ResolvedRole | null;
   prompts: ResolvedPrompt[];
+  /**
+   * Prompt ids the user explicitly disabled for this task via
+   * task_prompt_overrides. These have already been removed from `prompts`
+   * (the resolver applies the override as a final filter). Surfaced here so
+   * the UI can render greyed-out chips and `get_task_context` consumers can
+   * see what's been suppressed without re-querying.
+   *
+   * Optional on the type so older test fixtures and the legacy
+   * `synthesiseFromTask` shim don't have to populate it; the live resolver
+   * always sets at least an empty array. Stale overrides — disabled rows
+   * whose prompt is no longer inherited — are also included; agents
+   * typically ignore this field.
+   */
+  disabled_prompts?: string[];
 }

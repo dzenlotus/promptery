@@ -40,6 +40,7 @@ export function runMigrations(db: Database, opts: RunMigrationsOptions = {}): vo
   runMigration(db, "011_prompt_short_description", apply011PromptShortDescription);
   runMigration(db, "012_task_events", apply012TaskEvents);
   runMigration(db, "013_prompt_tags", apply013PromptTags);
+  runMigration(db, "015_task_prompt_overrides", apply015TaskPromptOverrides);
   backfillDefaultColumnsForEmptyBoards(db);
 }
 
@@ -573,6 +574,20 @@ function apply012TaskEvents(db: Database): void {
  */
 function apply013PromptTags(db: Database): void {
   const sqlUrl = new URL("./migrations/013_prompt_tags.sql", import.meta.url);
+  const sql = readFileSync(sqlUrl, "utf-8");
+  db.exec(sql);
+}
+
+/**
+ * Apply 015: stand up the task_prompt_overrides table that lets a task
+ * suppress individual inherited prompts. Schema.sql declares the same shape
+ * for fresh installs; this migration is for upgrading existing DBs.
+ *
+ * Idempotent — CREATE IF NOT EXISTS on both the table and its index, so a
+ * partial prior run plus this migration converge on the same state.
+ */
+function apply015TaskPromptOverrides(db: Database): void {
+  const sqlUrl = new URL("./migrations/015_task_prompt_overrides.sql", import.meta.url);
   const sql = readFileSync(sqlUrl, "utf-8");
   db.exec(sql);
 }

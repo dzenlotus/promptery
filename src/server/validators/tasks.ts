@@ -50,3 +50,13 @@ export const moveTaskWithResolutionSchema = z.object({
   role_handling: resolutionHandlingSchema.default("keep"),
   prompt_handling: resolutionHandlingSchema.default("keep"),
 });
+
+/**
+ * Per-task prompt override toggle. enabled=0 suppresses the inherited prompt
+ * for this task; enabled=1 is reserved for future force-enable semantics. We
+ * accept both values today so the UI can flip back and forth without round-
+ * tripping through DELETE in scenarios where that helps.
+ */
+export const setTaskPromptOverrideSchema = z.object({
+  enabled: z.union([z.literal(0), z.literal(1)]),
+});

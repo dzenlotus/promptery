@@ -237,6 +237,15 @@ export const api = {
         method: "POST",
         body: json(data),
       }),
+    setPromptOverride: (id: string, promptId: string, enabled: 0 | 1) =>
+      request<Task>(`/api/tasks/${id}/prompt-overrides/${promptId}`, {
+        method: "PUT",
+        body: json({ enabled }),
+      }),
+    deletePromptOverride: (id: string, promptId: string) =>
+      request<Task>(`/api/tasks/${id}/prompt-overrides/${promptId}`, {
+        method: "DELETE",
+      }),
   },
   prompts: primitiveResource<Prompt>("/api/prompts"),
   promptGroups: {

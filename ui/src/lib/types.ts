@@ -104,6 +104,14 @@ export interface Task {
   prompts: TaskLinkedPrompt[];
   skills: TaskLinkedSkill[];
   mcp_tools: TaskLinkedMcpTool[];
+  /**
+   * Prompt ids the user explicitly disabled for this task via per-task
+   * overrides. The corresponding inherited chip is rendered greyed-out and
+   * the resolver suppresses the prompt from the effective context. Empty
+   * array when no overrides are set. Optional for backward compatibility
+   * with older servers that predate this field.
+   */
+  disabled_prompts?: string[];
   created_at: number;
   updated_at: number;
 }
@@ -229,6 +237,13 @@ export interface ResolvedTaskContext {
   task_id: string;
   role: ResolvedRole | null;
   prompts: ResolvedPrompt[];
+  /**
+   * Prompt ids the user explicitly disabled for this task via per-task
+   * overrides. Already filtered out of `prompts`; surfaced here so the UI
+   * can grey out the corresponding inherited chip without a second request.
+   * Optional for backwards compatibility — older servers may omit it.
+   */
+  disabled_prompts?: string[];
 }
 
 export interface BackupInfo {

@@ -35,6 +35,21 @@ interface Props {
   inheritedItems: Prompt[];
   directIds: string[];
   onDirectChange: (nextIds: string[]) => void;
+  /**
+   * Prompt ids the task explicitly disabled via per-task overrides. The
+   * matching inherited chips are rendered with a strike-through / muted
+   * style. Click an inherited chip to flip the override (the parent calls
+   * back through `onToggleDisabled`).
+   */
+  disabledPromptIds?: string[];
+  /**
+   * Optional callback for the inherited-chip click. When omitted (e.g. in
+   * create mode where the task doesn't exist yet) the chips render as
+   * read-only and the click is a no-op. Receives the current "disabled"
+   * state — true means "unset the override" (re-enable), false means
+   * "create override with enabled=0" (disable).
+   */
+  onToggleDisabled?: (promptId: string, currentlyDisabled: boolean) => void;
   roleName?: string | null;
   /** Navigate to a prompt's edit page. */
   onOpenPrompt?: (id: string) => void;
@@ -57,10 +72,16 @@ export function TaskPromptsEditor({
   inheritedItems,
   directIds,
   onDirectChange,
+  disabledPromptIds,
+  onToggleDisabled,
   roleName,
   onOpenPrompt,
   testId = "task-prompts-editor",
 }: Props) {
+  const disabledSet = useMemo(
+    () => new Set(disabledPromptIds ?? []),
+    [disabledPromptIds]
+  );
   const [addOpen, setAddOpen] = useState(false);
   const [search, setSearch] = useState("");
 
@@ -121,25 +142,60 @@ export function TaskPromptsEditor({
     onDirectChange(arrayMove(directIds, oldIndex, newIndex));
   };
 
-  const inheritedTooltip = roleName
+  const baseInheritedTooltip = roleName
     ? `Inherited from role «${roleName}» — change via role selector`
-    : "Inherited from role — change via role selector";
+    : "Inherited from role";
+
+  const tooltipFor = (disabled: boolean): string =>
+    onToggleDisabled === undefined
+      ? baseInheritedTooltip
+      : disabled
+        ? `${baseInheritedTooltip}. Disabled for this task — click to re-enable.`
+        : `${baseInheritedTooltip}. Click to disable for this task only.`;
+
+  const handleInheritedClick = (promptId: string) => {
+    if (!onToggleDisabled) return;
+    onToggleDisabled(promptId, disabledSet.has(promptId));
+  };
 
   return (
     <div data-testid={testId} className="flex flex-wrap items-center gap-1.5">
-      {inheritedItems.map((it) => (
-        <Chip
-          key={`inh-${it.id}`}
-          name={it.name}
-          color={it.color}
-          size="sm"
-          inherited
-          tooltip={it.short_description ? `${it.short_description} (${inheritedTooltip})` : inheritedTooltip}
-          onClick={onOpenPrompt ? () => onOpenPrompt(it.id) : undefined}
-          className={onOpenPrompt ? "cursor-pointer" : undefined}
-          data-testid={`${testId}-inherited-${it.id}`}
-        />
-      ))}
+      {inheritedItems.map((it) => {
+        const disabled = disabledSet.has(it.id);
+        // Toggle-disable takes precedence over open-prompt; if neither is
+        // wired the chip stays inert. The override toggle is the primary
+        // interaction in the task dialog where this editor lives.
+        const handleClick = onToggleDisabled
+          ? (e: React.MouseEvent) => {
+              e.stopPropagation();
+              handleInheritedClick(it.id);
+            }
+          : onOpenPrompt
+          ? () => onOpenPrompt(it.id)
+          : undefined;
+        const baseTooltip = onToggleDisabled
+          ? tooltipFor(disabled)
+          : inheritedTooltip;
+        return (
+          <Chip
+            key={`inh-${it.id}`}
+            name={it.name}
+            color={it.color}
+            size="sm"
+            inherited
+            disabled={disabled}
+            tooltip={
+              it.short_description
+                ? `${it.short_description} (${baseTooltip})`
+                : baseTooltip
+            }
+            onClick={handleClick}
+            className={!onToggleDisabled && onOpenPrompt ? "cursor-pointer" : undefined}
+            data-testid={`${testId}-inherited-${it.id}`}
+            data-disabled={disabled ? "true" : "false"}
+          />
+        );
+      })}
 
       <DndContext
         sensors={sensors}

@@ -15,4 +15,5 @@ export * from "./columnPrompts.js";
 export * from "./promptGroups.js";
 export * from "./tags.js";
 export * from "./taskEvents.js";
+export * from "./taskPromptOverrides.js";
 export * from "./errors.js";

@@ -9,11 +9,17 @@ export interface LayerPromptEntry {
   origin: "direct" | "role";
   /** Role carrier for role-origin entries. Always set when origin === "role". */
   role?: { id: string; name: string; color: string | null };
-  /** Always `true` for prompts — kept in the type for symmetry with roles
-   *  and so callers can render a uniform ✓/✗ indicator. Prompts are
-   *  unioned across layers, so every layer that lists a prompt actually
-   *  contributes it. */
+  /** True when the prompt actually flows into the resolved context. False
+   *  means it's being shadowed by a stronger layer's variant or — in the
+   *  per-task override case — the user explicitly disabled it for this
+   *  task. Prompts otherwise union across layers, so most rows read true.
+   */
   applied: boolean;
+  /** True when the user toggled this prompt off for the current task via
+   *  the per-task override. Distinct from `!applied` — the latter also
+   *  covers shadowing — so the UI can render a "disabled by user" badge
+   *  separately from "shadowed". */
+  disabledByOverride?: boolean;
 }
 
 export interface PreparedLayer {
@@ -32,6 +38,9 @@ interface Input {
   localRoleId: string | null;
   /** Staged local direct-prompt ids on the task. */
   localDirectIds: string[];
+  /** Staged local set of prompts disabled via per-task overrides. The
+   *  matching entries get `applied=false` + `disabledByOverride=true`. */
+  localDisabledIds?: string[];
   /** Details already loaded for the active role — the role whose id is
    *  `localRoleId` (fetched via useRole by the caller). */
   taskRoleDetail?: RoleWithRelations | null;
@@ -114,9 +123,21 @@ export function buildLayeredInheritance(input: Input): PreparedLayer[] {
     input.board.role?.id ??
     null;
 
+  const disabledIds = new Set(input.localDisabledIds ?? []);
+  // Per-task override marks the prompt as suppressed in the resolved context
+  // even though every layer that lists it still *contributes* it — the
+  // override is applied as a final filter step, not a layer-level edit.
   const markEntries = (
     raw: ReturnType<typeof composeLayerEntries>
-  ): LayerPromptEntry[] => raw.map((e) => ({ ...e, applied: true }));
+  ): LayerPromptEntry[] =>
+    raw.map((e) => {
+      const isDisabled = disabledIds.has(e.promptId);
+      return {
+        ...e,
+        applied: !isDisabled,
+        disabledByOverride: isDisabled,
+      };
+    });
 
   const taskLayerRole: Role | null = input.taskRoleDetail
     ? {

@@ -214,4 +214,25 @@ describe("buildLayeredInheritance", () => {
       expect(l.roleApplied).toBe(false);
     }
   });
+
+  it("marks per-task disabled prompts with applied=false + disabledByOverride", () => {
+    const p1 = prompt("p1");
+    const p2 = prompt("p2");
+    const layers = buildLayeredInheritance({
+      localRoleId: null,
+      localDirectIds: [],
+      localDisabledIds: ["p1"],
+      column: { role: null, prompts: [] },
+      board: { role: null, prompts: [p1, p2] },
+    });
+
+    const boardEntries = layers.find((l) => l.layerId === "board")!.entries;
+    const e1 = boardEntries.find((e) => e.promptId === "p1")!;
+    const e2 = boardEntries.find((e) => e.promptId === "p2")!;
+
+    expect(e1.applied).toBe(false);
+    expect(e1.disabledByOverride).toBe(true);
+    expect(e2.applied).toBe(true);
+    expect(e2.disabledByOverride).toBe(false);
+  });
 });

@@ -17,6 +17,7 @@ function makeTask(overrides: Partial<TaskWithRelations> = {}): TaskWithRelations
     prompts: [],
     skills: [],
     mcp_tools: [],
+    disabled_prompts: [],
     created_at: 0,
     updated_at: 0,
   };

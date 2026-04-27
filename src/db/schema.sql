@@ -213,6 +213,20 @@ CREATE INDEX IF NOT EXISTS idx_prompt_groups_position ON prompt_groups(position)
 CREATE INDEX IF NOT EXISTS idx_prompt_group_members_group ON prompt_group_members(group_id, position);
 CREATE INDEX IF NOT EXISTS idx_prompt_group_members_prompt ON prompt_group_members(prompt_id);
 
+-- Per-task overrides on inherited prompts. enabled=0 suppresses the prompt for
+-- this one task only; enabled=1 is reserved for future force-enable semantics.
+-- Stale rows (prompt no longer inherited) are silently ignored by the
+-- resolver — no auto-cleanup, see migration 015 for the rationale.
+CREATE TABLE IF NOT EXISTS task_prompt_overrides (
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  prompt_id TEXT NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
+  enabled INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (task_id, prompt_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_prompt_overrides_task ON task_prompt_overrides(task_id);
+
 -- Full-text search index for tasks. Triggers keep tasks_fts synced with the
 -- `tasks` table on insert/update/delete; on existing DBs migration 008 runs
 -- the same statements (idempotently) and backfills pre-existing rows.

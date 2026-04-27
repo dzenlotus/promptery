@@ -415,3 +415,33 @@ export const remove_task_prompt: ToolDefinition = {
     return { task_id: taskId, prompt_id: promptId, removed: true };
   },
 };
+
+export const set_task_prompt_override: ToolDefinition = {
+  name: "set_task_prompt_override",
+  description:
+    "Temporarily exclude inherited prompts for one task without removing them from the role. Set enabled=0 to suppress an inherited prompt for this task only; pass enabled=null (or call with no enabled value to revert) to drop the override entirely and let inheritance decide again.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      task_id: { type: "string" },
+      prompt_id: { type: "string" },
+      enabled: {
+        type: ["number", "null"],
+        description:
+          "0 disables the prompt; 1 force-enables (reserved); null clears the override.",
+      },
+    },
+    required: ["task_id", "prompt_id"],
+    additionalProperties: false,
+  },
+  handler: async (args, { hub }) => {
+    const taskId = args.task_id as string;
+    const promptId = args.prompt_id as string;
+    if (args.enabled === null || args.enabled === undefined) {
+      return hub.delete(`/api/tasks/${taskId}/prompt-overrides/${promptId}`);
+    }
+    return hub.put(`/api/tasks/${taskId}/prompt-overrides/${promptId}`, {
+      enabled: args.enabled as number,
+    });
+  },
+};

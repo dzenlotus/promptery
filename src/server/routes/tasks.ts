@@ -13,6 +13,7 @@ import {
   addTaskSkillSchema,
   addTaskMcpToolSchema,
   searchTasksQuerySchema,
+  setTaskPromptOverrideSchema,
 } from "../validators/tasks.js";
 import { bus } from "../events/bus.js";
 import { buildContextBundle } from "../../lib/context.js";
@@ -504,6 +505,48 @@ tasksRoute.post("/:id/mcp_tools", zValidator("json", addTaskMcpToolSchema), (c) 
     data: { boardId: full.board_id, taskId, mcpToolId: mcp_tool_id, task: full },
   });
   return c.json(full, 201);
+});
+
+/**
+ * Per-task prompt overrides — toggle an inherited prompt off without removing
+ * it from the underlying role / column / board. The resolver applies these as
+ * a final filter step (see resolveTaskContext).
+ *
+ * PUT  /:id/prompt-overrides/:promptId  body { enabled: 0 | 1 }
+ * DELETE /:id/prompt-overrides/:promptId  → reverts to inheritance default
+ */
+tasksRoute.put(
+  "/:id/prompt-overrides/:promptId",
+  zValidator("json", setTaskPromptOverrideSchema),
+  (c) => {
+    const taskId = c.req.param("id");
+    const promptId = c.req.param("promptId");
+    const { enabled } = c.req.valid("json");
+    if (!q.getTask(getDb(), taskId)) return c.json({ error: "task not found" }, 404);
+    if (!q.getPrompt(getDb(), promptId)) {
+      return c.json({ error: "prompt not found" }, 404);
+    }
+    q.setOverride(getDb(), { taskId, promptId, enabled });
+    const full = q.getTask(getDb(), taskId)!;
+    bus.publish({
+      type: "task.updated",
+      data: { boardId: full.board_id, taskId, task: full },
+    });
+    return c.json(full);
+  }
+);
+
+tasksRoute.delete("/:id/prompt-overrides/:promptId", (c) => {
+  const taskId = c.req.param("id");
+  const promptId = c.req.param("promptId");
+  if (!q.getTask(getDb(), taskId)) return c.json({ error: "task not found" }, 404);
+  q.deleteOverride(getDb(), taskId, promptId);
+  const full = q.getTask(getDb(), taskId)!;
+  bus.publish({
+    type: "task.updated",
+    data: { boardId: full.board_id, taskId, task: full },
+  });
+  return c.json(full);
 });
 
 tasksRoute.delete("/:id/mcp_tools/:mcpToolId", (c) => {

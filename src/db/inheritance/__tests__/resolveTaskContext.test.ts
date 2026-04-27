@@ -8,6 +8,7 @@ import { createPrompt } from "../../queries/prompts.js";
 import { addTaskPrompt } from "../../queries/taskPrompts.js";
 import { setBoardPrompts } from "../../queries/boardPrompts.js";
 import { setColumnPrompts } from "../../queries/columnPrompts.js";
+import { setOverride } from "../../queries/taskPromptOverrides.js";
 import { createTestDb } from "../../queries/__tests__/helpers.js";
 import { resolveTaskContext } from "../resolveTaskContext.js";
 
@@ -208,5 +209,97 @@ describe("resolveTaskContext — prompt union", () => {
     const names = ctx!.prompts.map((p) => p.name);
     // Expected: position order [bravo, charlie, alpha], not alphabetical [alpha, bravo, charlie].
     expect(names).toEqual(["bravo", "charlie", "alpha"]);
+  });
+});
+
+describe("resolveTaskContext — per-task prompt overrides", () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = createTestDb();
+  });
+
+  it("filters out a prompt with enabled=0 and surfaces it in disabled_prompts", () => {
+    const b = createBoard(db, "B");
+    const col = firstColumnId(db, b.id);
+    const t = createTask(db, b.id, col, { title: "T" });
+    const pBoard = createPrompt(db, { name: "board-p" });
+    setBoardPrompts(db, b.id, [pBoard.id]);
+
+    // Sanity: without an override the prompt is in the resolved list.
+    let ctx = resolveTaskContext(db, t.id);
+    expect(ctx?.prompts.map((p) => p.id)).toContain(pBoard.id);
+    expect(ctx?.disabled_prompts).toEqual([]);
+
+    setOverride(db, { taskId: t.id, promptId: pBoard.id, enabled: 0 });
+
+    ctx = resolveTaskContext(db, t.id);
+    expect(ctx?.prompts.map((p) => p.id)).not.toContain(pBoard.id);
+    expect(ctx?.disabled_prompts).toEqual([pBoard.id]);
+  });
+
+  it("does not affect other tasks (per-task isolation)", () => {
+    const b = createBoard(db, "B");
+    const col = firstColumnId(db, b.id);
+    const t1 = createTask(db, b.id, col, { title: "T1" });
+    const t2 = createTask(db, b.id, col, { title: "T2" });
+    const pBoard = createPrompt(db, { name: "board-p" });
+    setBoardPrompts(db, b.id, [pBoard.id]);
+
+    setOverride(db, { taskId: t1.id, promptId: pBoard.id, enabled: 0 });
+
+    const ctx1 = resolveTaskContext(db, t1.id);
+    const ctx2 = resolveTaskContext(db, t2.id);
+
+    expect(ctx1?.prompts.map((p) => p.id)).not.toContain(pBoard.id);
+    expect(ctx2?.prompts.map((p) => p.id)).toContain(pBoard.id);
+  });
+
+  it("treats enabled=1 as default (prompt remains visible)", () => {
+    const b = createBoard(db, "B");
+    const col = firstColumnId(db, b.id);
+    const t = createTask(db, b.id, col, { title: "T" });
+    const pBoard = createPrompt(db, { name: "board-p" });
+    setBoardPrompts(db, b.id, [pBoard.id]);
+
+    // enabled=1 is reserved; it must not flip the prompt off.
+    setOverride(db, { taskId: t.id, promptId: pBoard.id, enabled: 1 });
+
+    const ctx = resolveTaskContext(db, t.id);
+    expect(ctx?.prompts.map((p) => p.id)).toContain(pBoard.id);
+    expect(ctx?.disabled_prompts).toEqual([]);
+  });
+
+  it("silently ignores a stale override (prompt no longer inherited)", () => {
+    const b = createBoard(db, "B");
+    const col = firstColumnId(db, b.id);
+    const t = createTask(db, b.id, col, { title: "T" });
+    const pOrphan = createPrompt(db, { name: "orphan-p" });
+
+    // Toggle off a prompt that isn't actually attached anywhere.
+    setOverride(db, { taskId: t.id, promptId: pOrphan.id, enabled: 0 });
+
+    const ctx = resolveTaskContext(db, t.id);
+    // Effective prompts are empty (nothing was inherited to begin with),
+    // but the disabled row is still surfaced for UI transparency.
+    expect(ctx?.prompts).toEqual([]);
+    expect(ctx?.disabled_prompts).toEqual([pOrphan.id]);
+  });
+
+  it("disables a role-inherited prompt without touching the role", () => {
+    const b = createBoard(db, "B");
+    const col = firstColumnId(db, b.id);
+    const t = createTask(db, b.id, col, { title: "T" });
+    const pRole = createPrompt(db, { name: "role-p" });
+    const role = createRole(db, { name: "R" });
+    setRolePrompts(db, role.id, [pRole.id]);
+    setTaskRole(db, t.id, role.id);
+
+    setOverride(db, { taskId: t.id, promptId: pRole.id, enabled: 0 });
+
+    const ctx = resolveTaskContext(db, t.id);
+    expect(ctx?.role?.id).toBe(role.id);
+    expect(ctx?.prompts).toEqual([]);
+    expect(ctx?.disabled_prompts).toEqual([pRole.id]);
   });
 });
