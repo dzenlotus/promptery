@@ -549,7 +549,7 @@ describe("data API", () => {
       app_version: string;
       data: Record<string, unknown>;
     };
-    expect(bundle.format_version).toBe("1.0");
+    expect(bundle.format_version).toBe("2.0");
     expect(typeof bundle.app_version).toBe("string");
     expect(Array.isArray(bundle.data.boards)).toBe(true);
     expect(Array.isArray(bundle.data.prompts)).toBe(true);
