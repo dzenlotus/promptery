@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { wsClient } from "../lib/ws.js";
 import { qk } from "../lib/query.js";
+import { reportsQk } from "./useAgentReports.js";
 import type { ServerEvent, TaskEvent } from "../lib/types.js";
 
 export function useWebSocket(): void {
@@ -174,32 +175,33 @@ export function useWebSocket(): void {
           break;
         case "tag.created":
         case "tag.deleted":
-          // Both events change the tag list and may add/remove chips on
-          // every prompt row, so the per-prompt tag map needs a refresh too.
           qc.invalidateQueries({ queryKey: qk.tags });
           qc.invalidateQueries({ queryKey: qk.tagsByPrompt });
           break;
         case "tag.updated":
           qc.invalidateQueries({ queryKey: qk.tags });
           qc.invalidateQueries({ queryKey: qk.tag(evt.data.tagId) });
-          // Updates that change membership (set/add/remove) also fire a
-          // per-prompt event, but a rename/recolor is broadcast through
-          // tag.updated alone — invalidate the chip cache so stale labels
-          // don't linger.
           qc.invalidateQueries({ queryKey: qk.tagsByPrompt });
           break;
         case "prompt.tags_changed":
-          // Fired alongside tag.* membership changes — refresh the
-          // sidebar chip map without a separate tag.updated round trip.
           qc.invalidateQueries({ queryKey: qk.tagsByPrompt });
           break;
         case "task.event_recorded":
-          // Prepend the new event so an open dialog updates without refetching
-          // — the route returns newest-first, matching this insertion order.
           qc.setQueryData<TaskEvent[]>(qk.taskEvents(evt.data.taskId), (old) => {
             if (!old) return [evt.data.event];
             return [evt.data.event, ...old];
           });
+          break;
+        case "report.created":
+        case "report.updated":
+          qc.invalidateQueries({ queryKey: reportsQk.forTask(evt.data.taskId) });
+          qc.setQueryData(reportsQk.one(evt.data.reportId), evt.data.report);
+          qc.invalidateQueries({ queryKey: ["reports", "search"] });
+          break;
+        case "report.deleted":
+          qc.invalidateQueries({ queryKey: reportsQk.forTask(evt.data.taskId) });
+          qc.removeQueries({ queryKey: reportsQk.one(evt.data.reportId) });
+          qc.invalidateQueries({ queryKey: ["reports", "search"] });
           break;
       }
     });

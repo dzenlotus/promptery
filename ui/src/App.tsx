@@ -17,6 +17,7 @@ import { PromptGroupView } from "./views/PromptGroupView.js";
 import { RolesView } from "./views/RolesView.js";
 import { SkillsView } from "./views/SkillsView.js";
 import { McpToolsView } from "./views/McpToolsView.js";
+import { ReportsSearchView } from "./views/ReportsSearchView.js";
 import { SettingsRedirect } from "./views/SettingsRedirect.js";
 import { SettingsDataView } from "./views/SettingsDataView.js";
 import { SettingsAppearanceView } from "./views/SettingsAppearanceView.js";
@@ -47,6 +48,7 @@ function Routed() {
       <Route path="/prompts/:id?" component={PromptsView} />
       <Route path="/skills" component={SkillsView} />
       <Route path="/mcp" component={McpToolsView} />
+      <Route path="/reports/search" component={ReportsSearchView} />
       <Route path="/settings" component={SettingsRedirect} />
       <Route path="/settings/data" component={SettingsDataView} />
       <Route path="/settings/appearance" component={SettingsAppearanceView} />

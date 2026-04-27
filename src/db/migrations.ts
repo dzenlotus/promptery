@@ -43,6 +43,7 @@ export function runMigrations(db: Database, opts: RunMigrationsOptions = {}): vo
   runMigration(db, "013_prompt_tags", apply013PromptTags);
   runMigration(db, "014_prompt_token_count", apply014TokenCount);
   runMigration(db, "015_task_prompt_overrides", apply015TaskPromptOverrides);
+  runMigration(db, "017_agent_reports", apply017AgentReports);
   backfillDefaultColumnsForEmptyBoards(db);
 }
 
@@ -54,6 +55,16 @@ export function runMigrations(db: Database, opts: RunMigrationsOptions = {}): vo
 export function runFTSMigration(db: Database): void {
   ensureMigrationsTable(db);
   runMigration(db, "008_tasks_fts", apply008TasksFts);
+}
+
+/**
+ * Test seam: apply only the agent_reports migration on a DB that was
+ * previously initialised without it. Used to verify the backfill step
+ * correctly indexes pre-existing rows in agent_reports_fts.
+ */
+export function runAgentReportsMigration(db: Database): void {
+  ensureMigrationsTable(db);
+  runMigration(db, "017_agent_reports", apply017AgentReports);
 }
 
 function ensureMigrationsTable(db: Database): void {
@@ -617,6 +628,29 @@ function apply015TaskPromptOverrides(db: Database): void {
   const sqlUrl = new URL("./migrations/015_task_prompt_overrides.sql", import.meta.url);
   const sql = readFileSync(sqlUrl, "utf-8");
   db.exec(sql);
+}
+
+/**
+ * Apply 017: stand up the `agent_reports` table, its two indexes, the FTS5
+ * sibling and three sync triggers. Backfills `agent_reports_fts` from any
+ * rows that may already exist on a DB whose schema.sql had the table but
+ * not the FTS bits — idempotent because the WHERE NOT IN clause skips
+ * rows already present.
+ *
+ * Schema.sql also declares these on fresh installs; this step upgrades
+ * pre-existing DBs and seeds the index from current rows.
+ */
+function apply017AgentReports(db: Database): void {
+  const sqlUrl = new URL("./migrations/017_agent_reports.sql", import.meta.url);
+  const sql = readFileSync(sqlUrl, "utf-8");
+  db.exec(sql);
+  if (tableExists(db, "agent_reports")) {
+    db.exec(
+      `INSERT INTO agent_reports_fts(report_id, title, content)
+       SELECT id, title, content FROM agent_reports
+       WHERE id NOT IN (SELECT report_id FROM agent_reports_fts)`
+    );
+  }
 }
 
 /**

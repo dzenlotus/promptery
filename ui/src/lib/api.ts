@@ -1,4 +1,5 @@
 import type {
+  AgentReport,
   BackupInfo,
   Board,
   BoardWithRelations,
@@ -18,6 +19,8 @@ import type {
   PromptGroup,
   PromptGroupWithPrompts,
   PromptWithTags,
+  ReportKind,
+  ReportSearchHit,
   ResolvedTaskContext,
   Role,
   RoleWithRelations,
@@ -372,6 +375,31 @@ export const api = {
         `/api/settings/${encodeURIComponent(key)}`,
         { method: "DELETE" }
       ),
+  },
+  reports: {
+    listForTask: (taskId: string, kind?: ReportKind) => {
+      const path = kind
+        ? `/api/tasks/${taskId}/reports?kind=${encodeURIComponent(kind)}`
+        : `/api/tasks/${taskId}/reports`;
+      return request<AgentReport[]>(path);
+    },
+    create: (
+      taskId: string,
+      input: { kind: ReportKind; title: string; content: string; author?: string | null }
+    ) =>
+      request<AgentReport>(`/api/tasks/${taskId}/reports`, {
+        method: "POST",
+        body: json(input),
+      }),
+    get: (id: string) => request<AgentReport>(`/api/reports/${id}`),
+    update: (id: string, patch: { kind?: ReportKind; title?: string; content?: string }) =>
+      request<AgentReport>(`/api/reports/${id}`, { method: "PATCH", body: json(patch) }),
+    delete: (id: string) => request<{ ok: true }>(`/api/reports/${id}`, { method: "DELETE" }),
+    search: (query: string, limit?: number) => {
+      const params = new URLSearchParams({ q: query });
+      if (typeof limit === "number") params.set("limit", String(limit));
+      return request<ReportSearchHit[]>(`/api/reports/search?${params.toString()}`);
+    },
   },
   roles: {
     list: () => request<Role[]>("/api/roles"),

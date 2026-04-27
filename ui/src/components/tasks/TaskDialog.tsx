@@ -11,6 +11,7 @@ import { RoleSelector } from "./RoleSelector.js";
 import { TaskPromptsEditor } from "./TaskPromptsEditor.js";
 import { TaskEffectiveContext } from "./TaskEffectiveContext.js";
 import { TaskActivityLog } from "./TaskActivityLog.js";
+import { TaskReportsSection } from "./TaskReportsSection.js";
 import { api } from "../../lib/api.js";
 import { qk } from "../../lib/query.js";
 import { usePrompts } from "../../hooks/usePrompts.js";
@@ -344,6 +345,13 @@ export function TaskDialog(props: Props) {
             onSave={() => void submit()}
           />
         </Field>
+
+        {/* Reports — typed agent artefacts (investigation, plan, memo…). Only
+            available on existing tasks since we need a task id to attach to;
+            in create mode users save the task first, then add reports. */}
+        {mode === "edit" && editingId ? (
+          <TaskReportsSection taskId={editingId} />
+        ) : null}
 
         {/* Live preview of the inheritance stack. Visible in both modes —
             in create mode it shows what the task would pick up if saved in

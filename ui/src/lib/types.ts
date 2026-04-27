@@ -270,6 +270,38 @@ export interface ResolvedTaskContext {
   total_token_count: number;
 }
 
+export const REPORT_KINDS = [
+  "investigation",
+  "analysis",
+  "plan",
+  "summary",
+  "review",
+  "memo",
+] as const;
+
+export type ReportKind = (typeof REPORT_KINDS)[number];
+
+export interface AgentReport {
+  id: string;
+  task_id: string;
+  kind: ReportKind;
+  title: string;
+  content: string;
+  /** Free-form provenance hint (e.g. "claude-desktop"); null for UI authors. */
+  author: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface ReportSearchHit {
+  report: AgentReport;
+  task: {
+    id: string;
+    title: string;
+    board_id: string;
+  };
+}
+
 export interface BackupInfo {
   filename: string;
   fullPath: string;
@@ -470,7 +502,16 @@ export type ServerEvent =
   | {
       type: "task.event_recorded";
       data: { boardId: string; taskId: string; event: TaskEvent };
-    };
+    }
+  | {
+      type: "report.created";
+      data: { taskId: string; reportId: string; report: AgentReport };
+    }
+  | {
+      type: "report.updated";
+      data: { taskId: string; reportId: string; report: AgentReport };
+    }
+  | { type: "report.deleted"; data: { taskId: string; reportId: string } };
 
 /** Closed enum of activity-log event types — keep in sync with server. */
 export type TaskEventType =

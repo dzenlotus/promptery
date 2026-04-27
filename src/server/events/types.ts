@@ -9,6 +9,7 @@ import type { Role, RoleWithRelations } from "../../db/queries/roles.js";
 import type { PromptGroup } from "../../db/queries/promptGroups.js";
 import type { Tag } from "../../db/queries/tags.js";
 import type { TaskEvent } from "../../db/queries/taskEvents.js";
+import type { AgentReport } from "../../db/queries/agentReports.js";
 
 export type ServerEvent =
   | { type: "space.created"; data: { spaceId: string; space: Space } }
@@ -161,4 +162,16 @@ export type ServerEvent =
     }
   | { type: "maintenance.migration_step"; data: { name: string } }
   | { type: "maintenance.migration_snapshot"; data: { snapshotPath: string } }
-  | { type: "maintenance.migration_rolledback"; data: { reason: string } };
+  | { type: "maintenance.migration_rolledback"; data: { reason: string } }
+  | {
+      type: "report.created";
+      data: { taskId: string; reportId: string; report: AgentReport };
+    }
+  | {
+      type: "report.updated";
+      data: { taskId: string; reportId: string; report: AgentReport };
+    }
+  | {
+      type: "report.deleted";
+      data: { taskId: string; reportId: string };
+    };

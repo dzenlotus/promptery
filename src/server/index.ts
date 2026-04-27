@@ -15,6 +15,7 @@ import bridgesRoute from "./routes/bridges.js";
 import settingsRoute from "./routes/settings.js";
 import promptGroupsRoute from "./routes/promptGroups.js";
 import tagsRoute from "./routes/tags.js";
+import { reportsRoute, taskReportsRoute } from "./routes/agentReports.js";
 import metaRoute from "./routes/meta.js";
 import { createDataRouter } from "./routes/data.js";
 import maintenanceRoute from "./routes/maintenance.js";
@@ -37,6 +38,8 @@ export function createApp() {
   app.route("/api/boards", boardTasksRoute);
   app.route("/api/columns", columnsRoute);
   app.route("/api/tasks", tasksRoute);
+  app.route("/api/tasks", taskReportsRoute);
+  app.route("/api/reports", reportsRoute);
   app.route("/api/prompts", promptsRoute);
   app.route("/api/skills", skillsRoute);
   app.route("/api/mcp_tools", mcpToolsRoute);
