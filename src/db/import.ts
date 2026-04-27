@@ -504,7 +504,23 @@ function importSpaces(
 
   // Detect available columns on spaces table for insert
   const spaceCols = db.prepare("PRAGMA table_info(spaces)").all() as { name: string }[];
-  const hasSlugPrefix = spaceCols.some((c) => c.name === "slug_prefix");
+  const hasSlugPrefix = spaceCols.some((c) => c.name === "prefix");
+
+  // Track prefixes too — `prefix` is UNIQUE in the spaces schema, so a
+  // bundle that carries `task` (the default-space prefix) will collide on
+  // import. Mint a fresh prefix when needed.
+  const existingPrefixes = new Set(
+    (db.prepare("SELECT prefix FROM spaces").all() as { prefix: string }[]).map(
+      (r) => r.prefix
+    )
+  );
+  const mintPrefix = (desired: string): string => {
+    let candidate = desired.replace(/[^a-z0-9-]/g, "").slice(0, 10) || "spc";
+    if (!existingPrefixes.has(candidate)) return candidate;
+    let n = 2;
+    while (existingPrefixes.has(`${candidate}${n}`)) n++;
+    return `${candidate}${n}`.slice(0, 10);
+  };
 
   for (const space of spaces as SpaceRow[]) {
     if (existingNames.has(space.name)) {
@@ -516,14 +532,18 @@ function importSpaces(
       }
       const newName = findAvailableName(space.name, existingNames);
       const newId = nanoid();
-      insertSpaceRow(db, space, newId, newName, hasSlugPrefix);
+      const newPrefix = mintPrefix(space.prefix ?? newName.toLowerCase());
+      insertSpaceRow(db, { ...space, prefix: newPrefix }, newId, newName, hasSlugPrefix);
       existingNames.add(newName);
+      existingPrefixes.add(newPrefix);
       nameToId.set(newName, newId);
       idMap.set(space.id, newId);
       result.counts.spaces.renamed++;
     } else {
-      insertSpaceRow(db, space, space.id, space.name, hasSlugPrefix);
+      const newPrefix = mintPrefix(space.prefix ?? space.name.toLowerCase());
+      insertSpaceRow(db, { ...space, prefix: newPrefix }, space.id, space.name, hasSlugPrefix);
       existingNames.add(space.name);
+      existingPrefixes.add(newPrefix);
       nameToId.set(space.name, space.id);
       idMap.set(space.id, space.id);
       result.counts.spaces.added++;
@@ -555,8 +575,8 @@ function insertSpaceRow(
 ): void {
   if (hasSlugPrefix) {
     db.prepare(
-      `INSERT INTO spaces (id, name, slug_prefix, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`
-    ).run(id, name, space.slug_prefix ?? name.toLowerCase().slice(0, 4), space.created_at ?? Date.now(), Date.now());
+      `INSERT INTO spaces (id, name, prefix, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`
+    ).run(id, name, space.prefix ?? name.toLowerCase().slice(0, 4), space.created_at ?? Date.now(), Date.now());
   } else {
     db.prepare(
       `INSERT INTO spaces (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)`
@@ -937,15 +957,17 @@ function runInsertBoard(
 
 function buildInsertTaskStmt(db: Database): PreparedStatement {
   const hasSlug = columnExists(db, "tasks", "slug");
+  // Post-0.3.0 schema replaced tasks.number with tasks.slug. Older bundles
+  // may still carry .number — we drop it on import (slug supersedes).
   if (hasSlug) {
     return db.prepare(
-      `INSERT INTO tasks (id, board_id, column_id, number, slug, title, description, position, role_id, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO tasks (id, board_id, column_id, slug, title, description, position, role_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
   }
   return db.prepare(
-    `INSERT INTO tasks (id, board_id, column_id, number, title, description, position, role_id, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO tasks (id, board_id, column_id, title, description, position, role_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
 }
 
@@ -1019,7 +1041,6 @@ function insertBoardTasks(
         newTaskId,
         newBoardId,
         newColId,
-        number,
         slug,
         t.title,
         t.description ?? "",
@@ -1033,7 +1054,6 @@ function insertBoardTasks(
         newTaskId,
         newBoardId,
         newColId,
-        number,
         t.title,
         t.description ?? "",
         t.position ?? 0,
@@ -1098,12 +1118,12 @@ function mintSlug(
   // Get prefix from spaces table.
   const space = tableExists(db, "spaces")
     ? (db.prepare("SELECT * FROM spaces WHERE id = ?").get(spaceId) as {
-        slug_prefix?: string;
+        prefix?: string;
         name?: string;
       } | undefined)
     : undefined;
 
-  const prefix = space?.slug_prefix ?? space?.name?.toLowerCase().slice(0, 4) ?? "t";
+  const prefix = space?.prefix ?? space?.name?.toLowerCase().slice(0, 4) ?? "t";
 
   // Atomically claim the next counter value.
   const row = db

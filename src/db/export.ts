@@ -51,7 +51,7 @@ export interface ExportBundle {
 export interface SpaceRow {
   id: string;
   name: string;
-  slug_prefix: string;
+  prefix: string;
   created_at: number;
   updated_at: number;
 }
@@ -254,10 +254,12 @@ export function buildExport(
         )
         .all(...boardIds) as ColumnRow[];
 
-      // Build task SELECT — include slug if column exists
+      // Build task SELECT — include slug if column exists. tasks.number was
+      // dropped in 0.3.0 in favour of tasks.slug; keep the legacy column in
+      // the SELECT only when slug is absent (older DBs that haven't migrated).
       const taskHasSlug = columnExists(db, "tasks", "slug");
       const taskCols = taskHasSlug
-        ? "id, board_id, column_id, number, slug, title, description, position, role_id, created_at, updated_at"
+        ? "id, board_id, column_id, slug, title, description, position, role_id, created_at, updated_at"
         : "id, board_id, column_id, number, title, description, position, role_id, created_at, updated_at";
 
       data.tasks = db
