@@ -5,17 +5,18 @@ import {
   Database,
   Download,
   Plus,
+  RotateCcw,
   Trash2,
   Upload,
 } from "lucide-react";
 import { PageLayout } from "../layout/PageLayout.js";
 import { SettingsSidebar } from "../components/settings/SettingsSidebar.js";
 import { Button } from "../components/ui/Button.js";
+import { Dialog } from "../components/ui/Dialog.js";
 import { api, ApiError } from "../lib/api.js";
+import { qk } from "../lib/query.js";
 import type { BackupInfo, ImportPreview } from "../lib/types.js";
 import { cn } from "../lib/cn.js";
-
-const BACKUPS_QK = ["backups"] as const;
 
 export function SettingsDataView() {
   return (
@@ -384,16 +385,17 @@ function summariseImport(result: {
 
 function BackupsSection() {
   const qc = useQueryClient();
+  const [restoreTarget, setRestoreTarget] = useState<BackupInfo | null>(null);
 
   const { data: backups = [], isLoading } = useQuery<BackupInfo[]>({
-    queryKey: BACKUPS_QK,
+    queryKey: qk.backups,
     queryFn: () => api.data.listBackups(),
   });
 
   const createMutation = useMutation({
     mutationFn: () => api.data.createBackup(),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: BACKUPS_QK });
+      qc.invalidateQueries({ queryKey: qk.backups });
       toast.success("Backup created");
     },
     onError: (err: Error) =>
@@ -403,18 +405,36 @@ function BackupsSection() {
   const deleteMutation = useMutation({
     mutationFn: (filename: string) => api.data.deleteBackup(filename),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: BACKUPS_QK });
+      qc.invalidateQueries({ queryKey: qk.backups });
       toast.success("Backup deleted");
     },
     onError: (err: Error) => toast.error(err.message || "Delete failed"),
   });
+
+  const restoreMutation = useMutation({
+    mutationFn: (filename: string) => api.data.restoreBackup(filename),
+    onSuccess: () => {
+      setRestoreTarget(null);
+      qc.invalidateQueries();
+      toast.success("Restored — reloading…");
+      setTimeout(() => {
+        window.location.reload();
+      }, 1200);
+    },
+    onError: (err: Error) => {
+      setRestoreTarget(null);
+      toast.error(err instanceof ApiError ? err.message : err.message || "Restore failed");
+    },
+  });
+
+  const sortedBackups = [...backups].sort((a, b) => b.created_at - a.created_at);
 
   return (
     <section data-testid="data-backups-section">
       <SectionHeader
         icon={Database}
         title="Backups"
-        subtitle="Automatic backups are created daily when Promptery starts. Create manual backups anytime; restore via the terminal after stopping Promptery."
+        subtitle="Automatic backups are created daily when Promptery starts. Create manual backups anytime."
       />
 
       <div className="mb-4 mt-4">
@@ -429,24 +449,17 @@ function BackupsSection() {
         </Button>
       </div>
 
-      <div className="text-[12px] text-[var(--color-text-subtle)] mb-4">
-        To restore a backup, stop the hub and run{" "}
-        <code className="bg-[var(--hover-overlay)] px-1.5 py-0.5 rounded text-[var(--color-text-muted)] font-mono">
-          promptery restore &lt;filename&gt;
-        </code>
-      </div>
-
       {isLoading ? (
         <div className="text-[13px] text-[var(--color-text-subtle)]">
           Loading backups…
         </div>
-      ) : backups.length === 0 ? (
+      ) : sortedBackups.length === 0 ? (
         <div className="text-[13px] text-[var(--color-text-subtle)]">
           No backups yet.
         </div>
       ) : (
         <ul className="space-y-2" data-testid="backups-list">
-          {backups.map((b) => (
+          {sortedBackups.map((b) => (
             <li
               key={b.filename}
               data-testid={`backup-row-${b.filename}`}
@@ -456,25 +469,98 @@ function BackupsSection() {
                 <div className="text-[12px] font-mono text-[var(--color-text)] truncate">
                   {b.filename}
                 </div>
-                <div className="text-[11px] text-[var(--color-text-subtle)] mt-0.5">
-                  {new Date(b.created_at).toLocaleString()} · {formatBytes(b.size_bytes)}
-                  {" · "}
-                  <span className="uppercase tracking-[0.08em]">{b.reason}</span>
+                <div className="text-[11px] text-[var(--color-text-subtle)] mt-0.5 flex items-center gap-1.5 flex-wrap">
+                  <span>{formatAge(b.created_at)}</span>
+                  <span aria-hidden>·</span>
+                  <span>{formatBytes(b.size_bytes)}</span>
+                  <span aria-hidden>·</span>
+                  <span
+                    className={cn(
+                      "uppercase tracking-[0.08em] px-1.5 py-0.5 rounded text-[10px] font-medium",
+                      b.reason === "manual" && "bg-[var(--color-accent-soft)] text-[var(--color-accent)]",
+                      b.reason === "auto" && "bg-[var(--hover-overlay)] text-[var(--color-text-subtle)]",
+                      b.reason === "pre-migration" && "bg-[var(--color-warning-soft,var(--hover-overlay))] text-[var(--color-text-muted)]",
+                      b.reason === "pre-restore" && "bg-[var(--hover-overlay)] text-[var(--color-text-muted)]"
+                    )}
+                  >
+                    {b.reason}
+                  </span>
                 </div>
               </div>
-              <button
-                type="button"
-                title="Delete backup"
-                onClick={() => deleteMutation.mutate(b.filename)}
-                disabled={deleteMutation.isPending}
-                className="h-7 w-7 inline-flex items-center justify-center rounded-md text-[var(--color-text-subtle)] hover:text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)] transition-colors"
-              >
-                <Trash2 size={14} />
-              </button>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  type="button"
+                  title="Restore from this backup"
+                  onClick={() => setRestoreTarget(b)}
+                  disabled={restoreMutation.isPending || deleteMutation.isPending}
+                  data-testid={`restore-backup-button-${b.filename}`}
+                  className="h-7 px-2 inline-flex items-center gap-1.5 rounded-md text-[11px] font-medium text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--hover-overlay)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <RotateCcw size={13} />
+                  Restore
+                </button>
+                <button
+                  type="button"
+                  title="Delete backup"
+                  onClick={() => deleteMutation.mutate(b.filename)}
+                  disabled={deleteMutation.isPending || restoreMutation.isPending}
+                  data-testid={`delete-backup-button-${b.filename}`}
+                  className="h-7 w-7 inline-flex items-center justify-center rounded-md text-[var(--color-text-subtle)] hover:text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
             </li>
           ))}
         </ul>
       )}
+
+      <Dialog
+        open={restoreTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !restoreMutation.isPending) setRestoreTarget(null);
+        }}
+        title="Restore backup?"
+        description={
+          restoreTarget
+            ? `Restore from "${restoreTarget.filename}" (${formatAge(restoreTarget.created_at)}, ${formatBytes(restoreTarget.size_bytes)})`
+            : undefined
+        }
+        size="sm"
+        data-testid="restore-confirm-dialog"
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setRestoreTarget(null)}
+              disabled={restoreMutation.isPending}
+              data-testid="restore-cancel-button"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => {
+                if (restoreTarget) restoreMutation.mutate(restoreTarget.filename);
+              }}
+              disabled={restoreMutation.isPending}
+              data-testid="restore-confirm-button"
+            >
+              <RotateCcw size={13} />
+              {restoreMutation.isPending ? "Restoring…" : "Yes, restore"}
+            </Button>
+          </>
+        }
+      >
+        <div className="py-2 text-[13px] text-[var(--color-text-muted)] space-y-2">
+          <p>
+            This will replace your current data with the selected backup. Your current state will be automatically snapshotted as a <strong className="text-[var(--color-text)] font-medium">pre-restore</strong> backup before the restore takes effect.
+          </p>
+          <p>The page will reload automatically once the restore is complete.</p>
+        </div>
+      </Dialog>
     </section>
   );
 }
@@ -483,4 +569,19 @@ function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function formatAge(createdAt: number): string {
+  const diffMs = Date.now() - createdAt;
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 30) return `${diffDay}d ago`;
+  const diffMon = Math.floor(diffDay / 30);
+  if (diffMon < 12) return `${diffMon}mo ago`;
+  return `${Math.floor(diffMon / 12)}y ago`;
 }
