@@ -27,9 +27,15 @@ interface Props {
   task: Task;
   boardId: string;
   dragOverlay?: boolean;
+  /** When true, clicking the card body toggles selection instead of opening edit dialog. Drag is disabled. */
+  selectMode?: boolean;
+  /** Whether this card is currently selected in bulk-select mode. */
+  selected?: boolean;
+  /** Called when the user clicks the card body or the checkbox in select mode. */
+  onToggleSelected?: () => void;
 }
 
-export function TaskCard({ task, boardId, dragOverlay }: Props) {
+export function TaskCard({ task, boardId, dragOverlay, selectMode, selected, onToggleSelected }: Props) {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [boardMoveOpen, setBoardMoveOpen] = useState(false);
@@ -58,6 +64,8 @@ export function TaskCard({ task, boardId, dragOverlay }: Props) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     data: { type: "task", columnId: task.column_id, task },
+    // Disable drag when in select mode
+    disabled: selectMode,
   });
 
   const style: React.CSSProperties = {
@@ -105,11 +113,14 @@ export function TaskCard({ task, boardId, dragOverlay }: Props) {
         data-testid={`task-card-${task.id}`}
         data-task-slug={task.slug}
         {...attributes}
-        {...listeners}
-        onDoubleClick={() => setEditOpen(true)}
+        {...(!selectMode ? listeners : {})}
+        onClick={selectMode ? onToggleSelected : undefined}
+        onDoubleClick={!selectMode ? () => setEditOpen(true) : undefined}
         className={cn(
           "group gradient-border liquid-glass rounded-lg p-3 grid gap-1.5",
-          "cursor-grab active:cursor-grabbing",
+          !selectMode && "cursor-grab active:cursor-grabbing",
+          selectMode && "cursor-pointer",
+          selectMode && selected && "ring-2 ring-[var(--color-accent)] ring-offset-0",
           dragOverlay && "dnd-overlay shadow-[0_20px_40px_rgba(0,0,0,0.5)]"
         )}
       >
@@ -117,46 +128,54 @@ export function TaskCard({ task, boardId, dragOverlay }: Props) {
           <span className="text-[11px] tabular-nums text-[var(--color-text-subtle)]">
             {task.slug}
           </span>
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-            <IconButton
-              label="Edit task"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation();
-                setEditOpen(true);
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
-            >
-              <Pencil size={12} />
-            </IconButton>
-            <DropdownMenu>
-              <DropdownTrigger asChild>
-                <IconButton
-                  label="More task actions"
-                  size="sm"
-                  onPointerDown={(e) => e.stopPropagation()}
-                >
-                  <MoreHorizontal size={12} />
-                </IconButton>
-              </DropdownTrigger>
-              <DropdownContent align="end">
-                <DropdownItem
-                  onSelect={() => setBoardMoveOpen(true)}
-                >
-                  <ArrowRightLeft size={13} />
-                  Move to board...
-                </DropdownItem>
-                <DropdownSeparator />
-                <DropdownItem
-                  onSelect={() => setDeleteOpen(true)}
-                  danger
-                >
-                  <Trash2 size={13} />
-                  Delete
-                </DropdownItem>
-              </DropdownContent>
-            </DropdownMenu>
-          </div>
+          {selectMode ? (
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                checked={!!selected}
+                onChange={onToggleSelected}
+                onClick={(e) => e.stopPropagation()}
+                aria-label={`Select task ${task.title}`}
+                className="h-3.5 w-3.5 accent-[var(--color-accent)] cursor-pointer"
+              />
+            </div>
+          ) : (
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
+              <IconButton
+                label="Edit task"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setEditOpen(true);
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+              >
+                <Pencil size={12} />
+              </IconButton>
+              <DropdownMenu>
+                <DropdownTrigger asChild>
+                  <IconButton
+                    label="More task actions"
+                    size="sm"
+                    onPointerDown={(e) => e.stopPropagation()}
+                  >
+                    <MoreHorizontal size={12} />
+                  </IconButton>
+                </DropdownTrigger>
+                <DropdownContent align="end">
+                  <DropdownItem onSelect={() => setBoardMoveOpen(true)}>
+                    <ArrowRightLeft size={13} />
+                    Move to board...
+                  </DropdownItem>
+                  <DropdownSeparator />
+                  <DropdownItem onSelect={() => setDeleteOpen(true)} danger>
+                    <Trash2 size={13} />
+                    Delete
+                  </DropdownItem>
+                </DropdownContent>
+              </DropdownMenu>
+            </div>
+          )}
         </div>
         <h4 className="text-[13px] font-medium tracking-tight line-clamp-2">{task.title}</h4>
         {plainDesc ? (
