@@ -8,6 +8,8 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
+  /** Optional node rendered inline after the title text (e.g. a role chip). */
+  titleExtra?: ReactNode;
   description?: string;
   children: ReactNode;
   footer?: ReactNode;
@@ -25,6 +27,7 @@ export function Dialog({
   open,
   onOpenChange,
   title,
+  titleExtra,
   description,
   children,
   footer,
@@ -60,9 +63,12 @@ export function Dialog({
           >
             <div className="grid grid-cols-[1fr_auto] items-start gap-3 px-6 pt-5 pb-3">
               <div className="grid gap-1">
-                <RadixDialog.Title className="text-[17px] font-semibold tracking-tight">
-                  {title}
-                </RadixDialog.Title>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <RadixDialog.Title className="text-[17px] font-semibold tracking-tight">
+                    {title}
+                  </RadixDialog.Title>
+                  {titleExtra}
+                </div>
                 {description ? (
                   <RadixDialog.Description className="text-[13px] text-[var(--color-text-muted)]">
                     {description}

@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Dialog } from "../ui/Dialog.js";
+import { Chip } from "../ui/Chip.js";
 import { Button } from "../ui/Button.js";
 import { Input } from "../ui/Input.js";
 import { MilkdownEditor } from "../editor/MilkdownEditor.js";
@@ -249,12 +250,23 @@ export function TaskDialog(props: Props) {
   };
 
   const dialogTitle = mode === "create" ? "Create task" : `Edit task ${props.task.slug}`;
+  const headerRole = localRoleId ? allRoles.find((r) => r.id === localRoleId) ?? null : null;
 
   return (
     <Dialog
       open={open}
       onOpenChange={(o) => !o && onClose()}
       title={dialogTitle}
+      titleExtra={
+        headerRole ? (
+          <Chip
+            name={headerRole.name}
+            color={headerRole.color}
+            size="sm"
+            data-testid={`task-dialog-role-chip-${headerRole.id}`}
+          />
+        ) : undefined
+      }
       size="lg"
       data-testid={`task-dialog-${mode}`}
       footer={

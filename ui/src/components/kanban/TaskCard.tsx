@@ -1,11 +1,14 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { MoreHorizontal, Pencil, Trash2, ArrowRightLeft } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import type { Task } from "../../lib/types.js";
+import type { Role, Task } from "../../lib/types.js";
 import { cn } from "../../lib/cn.js";
+import { api } from "../../lib/api.js";
+import { qk } from "../../lib/query.js";
 import { IconButton } from "../ui/IconButton.js";
 import { Chip } from "../ui/Chip.js";
 import {
@@ -18,8 +21,6 @@ import {
 import { TaskDialog } from "../tasks/TaskDialog.js";
 import { TaskDeleteDialog } from "../tasks/TaskDeleteDialog.js";
 import { useUndoRedoStore } from "../../store/undoRedo.js";
-import { api } from "../../lib/api.js";
-import { qk } from "../../lib/query.js";
 import { BoardMoveDialog } from "../tasks/BoardMoveDialog.js";
 
 interface Props {
@@ -35,6 +36,24 @@ export function TaskCard({ task, boardId, dragOverlay }: Props) {
 
   const qc = useQueryClient();
   const { recordAction } = useUndoRedoStore();
+
+  // Inherited role: resolve column → board when task has no direct role.
+  // Both queries are already populated by KanbanColumn / KanbanView, so
+  // this reads from cache without issuing new network requests.
+  const { data: columnDetail } = useQuery({
+    queryKey: qk.column(task.column_id),
+    queryFn: () => api.columns.get(task.column_id),
+    staleTime: 30_000,
+    enabled: !task.role,
+  });
+  const { data: boardDetail } = useQuery({
+    queryKey: qk.board(task.board_id),
+    queryFn: () => api.boards.get(task.board_id),
+    staleTime: 30_000,
+    enabled: !task.role && !columnDetail?.role,
+  });
+  const inheritedRole: Role | null =
+    task.role ? null : (columnDetail?.role ?? boardDetail?.role ?? null);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
@@ -143,14 +162,23 @@ export function TaskCard({ task, boardId, dragOverlay }: Props) {
         {plainDesc ? (
           <p className="text-[12px] text-[var(--color-text-muted)] line-clamp-3">{plainDesc}</p>
         ) : null}
-        {task.role || extrasCount > 0 ? (
-          <div className="flex items-center gap-1.5 mt-1">
+        {task.role || inheritedRole || extrasCount > 0 ? (
+          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
             {task.role ? (
               <Chip
                 name={task.role.name}
                 color={task.role.color}
                 size="sm"
                 data-testid={`task-card-role-${task.role.id}`}
+              />
+            ) : inheritedRole ? (
+              <Chip
+                name={inheritedRole.name}
+                color={inheritedRole.color}
+                size="sm"
+                inherited
+                tooltip={`Inherited role: ${inheritedRole.name}`}
+                data-testid={`task-card-inherited-role-${inheritedRole.id}`}
               />
             ) : null}
             {extrasCount > 0 ? (
