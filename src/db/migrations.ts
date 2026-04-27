@@ -43,6 +43,7 @@ export function runMigrations(db: Database, opts: RunMigrationsOptions = {}): vo
   runMigration(db, "013_prompt_tags", apply013PromptTags);
   runMigration(db, "014_prompt_token_count", apply014TokenCount);
   runMigration(db, "015_task_prompt_overrides", apply015TaskPromptOverrides);
+  runMigration(db, "016_task_attachments", apply016TaskAttachments);
   runMigration(db, "017_agent_reports", apply017AgentReports);
   backfillDefaultColumnsForEmptyBoards(db);
 }
@@ -600,6 +601,17 @@ function apply014TokenCount(db: Database): void {
  */
 function apply012TaskEvents(db: Database): void {
   const sqlUrl = new URL("./migrations/012_task_events.sql", import.meta.url);
+  const sql = readFileSync(sqlUrl, "utf-8");
+  db.exec(sql);
+}
+
+/**
+ * Apply 016: stand up the task_attachments table + index. Schema.sql also
+ * declares the table on fresh installs; this step upgrades pre-existing DBs.
+ * Idempotent — both statements use IF NOT EXISTS.
+ */
+function apply016TaskAttachments(db: Database): void {
+  const sqlUrl = new URL("./migrations/016_task_attachments.sql", import.meta.url);
   const sql = readFileSync(sqlUrl, "utf-8");
   db.exec(sql);
 }

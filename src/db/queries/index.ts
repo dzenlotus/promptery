@@ -9,6 +9,7 @@ export * from "./roles.js";
 export * from "./taskPrompts.js";
 export * from "./taskSkills.js";
 export * from "./taskMcpTools.js";
+export * from "./taskAttachments.js";
 export * from "./settings.js";
 export * from "./boardPrompts.js";
 export * from "./columnPrompts.js";

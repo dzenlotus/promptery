@@ -302,6 +302,17 @@ export interface ReportSearchHit {
   };
 }
 
+export interface TaskAttachment {
+  id: string;
+  task_id: string;
+  filename: string;
+  mime_type: string;
+  size_bytes: number;
+  storage_path: string;
+  uploaded_at: number;
+  uploaded_by: string | null;
+}
+
 export interface BackupInfo {
   filename: string;
   fullPath: string;
@@ -454,6 +465,14 @@ export type ServerEvent =
   | {
       type: "task.mcp_tool_removed";
       data: { boardId: string; taskId: string; mcpToolId: string; task: Task };
+    }
+  | {
+      type: "task.attachment_added";
+      data: { boardId: string; taskId: string; attachment: TaskAttachment };
+    }
+  | {
+      type: "task.attachment_deleted";
+      data: { boardId: string; taskId: string; attachmentId: string };
     }
   | { type: "prompt.created"; data: { prompt: Prompt } }
   | { type: "prompt.updated"; data: { promptId: string; prompt: Prompt } }

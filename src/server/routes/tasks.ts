@@ -18,6 +18,7 @@ import {
 import { bus } from "../events/bus.js";
 import { buildContextBundle } from "../../lib/context.js";
 import { resolveTaskContext } from "../../db/inheritance/index.js";
+import { deleteAttachmentsForTask } from "../../lib/attachmentStorage.js";
 import { getBridgeRoleIds } from "../bridgeRegistry.js";
 
 /**
@@ -375,6 +376,10 @@ tasksRoute.delete("/:id", (c) => {
   const existing = q.getTask(getDb(), id);
   if (!existing) return c.json({ error: "task not found" }, 404);
   q.deleteTask(getDb(), id);
+  // FK CASCADE drops task_attachments rows; we still own the on-disk
+  // directory under ~/.promptery/attachments/<task-id>/. Best-effort sweep —
+  // failures are logged inside deleteAttachmentsForTask but never bubble up.
+  deleteAttachmentsForTask(id);
   bus.publish({ type: "task.deleted", data: { boardId: existing.board_id, taskId: id } });
   return c.json({ ok: true });
 });

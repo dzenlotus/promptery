@@ -31,6 +31,7 @@ import type {
   TagWithPrompts,
   Task,
   TaskEvent,
+  TaskAttachment,
   UpdatePrimitiveInput,
   UpdateTaskInput,
 } from "./types.js";
@@ -249,6 +250,36 @@ export const api = {
       request<Task>(`/api/tasks/${id}/prompt-overrides/${promptId}`, {
         method: "DELETE",
       }),
+  },
+  taskAttachments: {
+    list: (taskId: string) =>
+      request<TaskAttachment[]>(`/api/tasks/${taskId}/attachments`),
+    upload: async (taskId: string, file: File): Promise<TaskAttachment> => {
+      // Multipart upload — must NOT set Content-Type ourselves so the
+      // browser fills in the boundary parameter. `request<T>` always
+      // injects application/json, so we hit fetch directly here.
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`/api/tasks/${taskId}/attachments`, {
+        method: "POST",
+        body: fd,
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        const message = body.error ?? `Upload failed: ${res.status}`;
+        throw new ApiError(message, { status: res.status });
+      }
+      return res.json() as Promise<TaskAttachment>;
+    },
+    delete: (taskId: string, attachmentId: string) =>
+      request<{ ok: true }>(
+        `/api/tasks/${taskId}/attachments/${attachmentId}`,
+        { method: "DELETE" }
+      ),
+    downloadUrl: (taskId: string, attachmentId: string): string =>
+      `/api/tasks/${taskId}/attachments/${attachmentId}/download`,
   },
   prompts: primitiveResource<Prompt>("/api/prompts"),
   promptGroups: {

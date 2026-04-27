@@ -114,6 +114,14 @@ export function useWebSocket(): void {
           qc.invalidateQueries({ queryKey: qk.tasks(evt.data.boardId) });
           qc.invalidateQueries({ queryKey: qk.taskContext(evt.data.taskId) });
           break;
+        case "task.attachment_added":
+        case "task.attachment_deleted":
+          // Attachments live on their own query key; no full task refresh
+          // needed because nothing else in the task object embeds them.
+          qc.invalidateQueries({
+            queryKey: qk.taskAttachments(evt.data.taskId),
+          });
+          break;
         case "prompt.created":
         case "prompt.updated":
         case "prompt.deleted":

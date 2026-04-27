@@ -10,6 +10,7 @@ import type { PromptGroup } from "../../db/queries/promptGroups.js";
 import type { Tag } from "../../db/queries/tags.js";
 import type { TaskEvent } from "../../db/queries/taskEvents.js";
 import type { AgentReport } from "../../db/queries/agentReports.js";
+import type { TaskAttachment } from "../../db/queries/taskAttachments.js";
 
 export type ServerEvent =
   | { type: "space.created"; data: { spaceId: string; space: Space } }
@@ -105,6 +106,14 @@ export type ServerEvent =
   | {
       type: "task.mcp_tool_removed";
       data: { boardId: string; taskId: string; mcpToolId: string; task: TaskWithRelations };
+    }
+  | {
+      type: "task.attachment_added";
+      data: { boardId: string; taskId: string; attachment: TaskAttachment };
+    }
+  | {
+      type: "task.attachment_deleted";
+      data: { boardId: string; taskId: string; attachmentId: string };
     }
   | { type: "prompt.created"; data: { prompt: Prompt } }
   | { type: "prompt.updated"; data: { promptId: string; prompt: Prompt } }

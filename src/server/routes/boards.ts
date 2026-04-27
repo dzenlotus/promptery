@@ -11,6 +11,7 @@ import {
   updateBoardSchema,
 } from "../validators/boards.js";
 import { bus } from "../events/bus.js";
+import { deleteAttachmentsForTask } from "../../lib/attachmentStorage.js";
 
 const app = new Hono();
 
@@ -92,8 +93,17 @@ app.patch("/:id", zValidator("json", updateBoardSchema), (c) => {
 
 app.delete("/:id", (c) => {
   const id = c.req.param("id");
+  // Capture the cascading task ids before the DELETE so we can sweep their
+  // attachment directories. SQL FK CASCADE deletes the task rows but knows
+  // nothing about the on-disk side-table.
+  const taskIds = (
+    getDb()
+      .prepare("SELECT id FROM tasks WHERE board_id = ?")
+      .all(id) as { id: string }[]
+  ).map((r) => r.id);
   const ok = q.deleteBoard(getDb(), id);
   if (!ok) return c.json({ error: "board not found" }, 404);
+  for (const taskId of taskIds) deleteAttachmentsForTask(taskId);
   bus.publish({ type: "board.deleted", data: { boardId: id } });
   return c.json({ ok: true });
 });

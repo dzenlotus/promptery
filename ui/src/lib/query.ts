@@ -35,6 +35,7 @@ export const qk = {
   taskWithLocation: (idOrSlug: string) =>
     ["task-with-location", idOrSlug] as const,
   taskEvents: (id: string) => ["task-events", id] as const,
+  taskAttachments: (taskId: string) => ["task-attachments", taskId] as const,
   meta: ["meta"] as const,
   backups: ["backups"] as const,
 };

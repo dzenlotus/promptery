@@ -24,6 +24,10 @@ export function getBackupsDir(): string {
   return join(getHomeDir(), "backups");
 }
 
+export function getAttachmentsDir(): string {
+  return join(getHomeDir(), "attachments");
+}
+
 export function ensureHomeDir(): void {
   const dir = getHomeDir();
   if (!existsSync(dir)) {

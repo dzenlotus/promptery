@@ -232,6 +232,23 @@ CREATE TABLE IF NOT EXISTS task_prompt_overrides (
 
 CREATE INDEX IF NOT EXISTS idx_task_prompt_overrides_task ON task_prompt_overrides(task_id);
 
+-- Per-task file attachments (images + arbitrary files). Metadata only —
+-- the binary blob lives under ~/.promptery/attachments/<task_id>/<storage_path>.
+-- The application layer removes the on-disk directory after deleting the task;
+-- the FK CASCADE strips metadata rows automatically.
+CREATE TABLE IF NOT EXISTS task_attachments (
+  id TEXT PRIMARY KEY,
+  task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+  filename TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  size_bytes INTEGER NOT NULL,
+  storage_path TEXT NOT NULL,
+  uploaded_at INTEGER NOT NULL,
+  uploaded_by TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_task_attachments_task ON task_attachments(task_id);
+
 -- Full-text search index for tasks. Triggers keep tasks_fts synced with the
 -- `tasks` table on insert/update/delete; on existing DBs migration 008 runs
 -- the same statements (idempotently) and backfills pre-existing rows.

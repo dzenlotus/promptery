@@ -12,6 +12,7 @@ import { TaskPromptsEditor } from "./TaskPromptsEditor.js";
 import { TaskEffectiveContext } from "./TaskEffectiveContext.js";
 import { TaskActivityLog } from "./TaskActivityLog.js";
 import { TaskReportsSection } from "./TaskReportsSection.js";
+import { TaskAttachments } from "./TaskAttachments.js";
 import { api } from "../../lib/api.js";
 import { qk } from "../../lib/query.js";
 import { usePrompts } from "../../hooks/usePrompts.js";
@@ -345,6 +346,15 @@ export function TaskDialog(props: Props) {
             onSave={() => void submit()}
           />
         </Field>
+
+        {/* Attachments are persisted as soon as a file is uploaded, even
+            in "create" mode — but mounting requires a saved task id. We
+            only show the section in edit mode for that reason. */}
+        {mode === "edit" && editingId ? (
+          <Field label="Attachments">
+            <TaskAttachments taskId={editingId} />
+          </Field>
+        ) : null}
 
         {/* Reports — typed agent artefacts (investigation, plan, memo…). Only
             available on existing tasks since we need a task id to attach to;

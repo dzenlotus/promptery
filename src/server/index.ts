@@ -7,6 +7,7 @@ import spacesRoute from "./routes/spaces.js";
 import boardsRoute from "./routes/boards.js";
 import { boardColumnsRoute, columnsRoute } from "./routes/columns.js";
 import { boardTasksRoute, tasksRoute } from "./routes/tasks.js";
+import taskAttachmentsRoute from "./routes/taskAttachments.js";
 import promptsRoute from "./routes/prompts.js";
 import skillsRoute from "./routes/skills.js";
 import mcpToolsRoute from "./routes/mcpTools.js";
@@ -40,6 +41,7 @@ export function createApp() {
   app.route("/api/tasks", tasksRoute);
   app.route("/api/tasks", taskReportsRoute);
   app.route("/api/reports", reportsRoute);
+  app.route("/api/tasks", taskAttachmentsRoute);
   app.route("/api/prompts", promptsRoute);
   app.route("/api/skills", skillsRoute);
   app.route("/api/mcp_tools", mcpToolsRoute);

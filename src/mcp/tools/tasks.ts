@@ -394,6 +394,22 @@ export const add_task_prompt: ToolDefinition = {
   },
 };
 
+export const list_task_attachments: ToolDefinition = {
+  name: "list_task_attachments",
+  description:
+    "List metadata for files attached to a task (images and arbitrary files). Returns ids, filenames, mime types, sizes and upload timestamps. Binary content is NOT returned — use the UI or the HTTP download endpoint to fetch the bytes. Read-only: agents cannot upload attachments.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      task_id: { type: "string" },
+    },
+    required: ["task_id"],
+    additionalProperties: false,
+  },
+  handler: async (args, { hub }) =>
+    hub.get(`/api/tasks/${args.task_id as string}/attachments`),
+};
+
 export const remove_task_prompt: ToolDefinition = {
   name: "remove_task_prompt",
   description:
