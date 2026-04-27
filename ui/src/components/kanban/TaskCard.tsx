@@ -1,18 +1,26 @@
 import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Pencil, Trash2 } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash2, ArrowRightLeft } from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import type { Task } from "../../lib/types.js";
 import { cn } from "../../lib/cn.js";
 import { IconButton } from "../ui/IconButton.js";
 import { Chip } from "../ui/Chip.js";
+import {
+  DropdownMenu,
+  DropdownTrigger,
+  DropdownContent,
+  DropdownItem,
+  DropdownSeparator,
+} from "../ui/DropdownMenu.js";
 import { TaskDialog } from "../tasks/TaskDialog.js";
 import { TaskDeleteDialog } from "../tasks/TaskDeleteDialog.js";
 import { useUndoRedoStore } from "../../store/undoRedo.js";
 import { api } from "../../lib/api.js";
 import { qk } from "../../lib/query.js";
+import { BoardMoveDialog } from "../tasks/BoardMoveDialog.js";
 
 interface Props {
   task: Task;
@@ -23,6 +31,7 @@ interface Props {
 export function TaskCard({ task, boardId, dragOverlay }: Props) {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [boardMoveOpen, setBoardMoveOpen] = useState(false);
 
   const qc = useQueryClient();
   const { recordAction } = useUndoRedoStore();
@@ -85,11 +94,11 @@ export function TaskCard({ task, boardId, dragOverlay }: Props) {
           dragOverlay && "dnd-overlay shadow-[0_20px_40px_rgba(0,0,0,0.5)]"
         )}
       >
-        <div className="grid grid-cols-[1fr_auto_auto] items-center gap-1">
+        <div className="grid grid-cols-[1fr_auto] items-center gap-1">
           <span className="text-[11px] tabular-nums text-[var(--color-text-subtle)]">
             {task.slug}
           </span>
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
             <IconButton
               label="Edit task"
               size="sm"
@@ -101,18 +110,33 @@ export function TaskCard({ task, boardId, dragOverlay }: Props) {
             >
               <Pencil size={12} />
             </IconButton>
-            <IconButton
-              label="Delete task"
-              size="sm"
-              tone="danger"
-              onClick={(e) => {
-                e.stopPropagation();
-                setDeleteOpen(true);
-              }}
-              onPointerDown={(e) => e.stopPropagation()}
-            >
-              <Trash2 size={12} />
-            </IconButton>
+            <DropdownMenu>
+              <DropdownTrigger asChild>
+                <IconButton
+                  label="More task actions"
+                  size="sm"
+                  onPointerDown={(e) => e.stopPropagation()}
+                >
+                  <MoreHorizontal size={12} />
+                </IconButton>
+              </DropdownTrigger>
+              <DropdownContent align="end">
+                <DropdownItem
+                  onSelect={() => setBoardMoveOpen(true)}
+                >
+                  <ArrowRightLeft size={13} />
+                  Move to board...
+                </DropdownItem>
+                <DropdownSeparator />
+                <DropdownItem
+                  onSelect={() => setDeleteOpen(true)}
+                  danger
+                >
+                  <Trash2 size={13} />
+                  Delete
+                </DropdownItem>
+              </DropdownContent>
+            </DropdownMenu>
           </div>
         </div>
         <h4 className="text-[13px] font-medium tracking-tight line-clamp-2">{task.title}</h4>
@@ -152,6 +176,12 @@ export function TaskCard({ task, boardId, dragOverlay }: Props) {
         open={deleteOpen}
         onClose={() => setDeleteOpen(false)}
         onDeleted={handleDeleted}
+      />
+      <BoardMoveDialog
+        task={task}
+        sourceBoardId={boardId}
+        open={boardMoveOpen}
+        onClose={() => setBoardMoveOpen(false)}
       />
     </>
   );

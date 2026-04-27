@@ -121,6 +121,15 @@ export interface UpdateTaskInput {
   position?: number;
 }
 
+export type ResolutionHandling = "keep" | "detach" | "copy_to_target_board";
+
+export interface MoveWithResolutionInput {
+  column_id: string;
+  position?: number;
+  role_handling?: ResolutionHandling;
+  prompt_handling?: ResolutionHandling;
+}
+
 export interface CreatePrimitiveInput {
   name: string;
   content?: string;

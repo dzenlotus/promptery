@@ -293,6 +293,44 @@ export const move_task: ToolDefinition = {
   },
 };
 
+export const move_task_with_resolution: ToolDefinition = {
+  name: "move_task_with_resolution",
+  description:
+    "Move a task to another column (same board or cross-board) with explicit control over what happens to its role and direct prompts after the move. Use this instead of move_task when the task carries a role or direct prompts and you want to choose how they resolve on the target board. role_handling and prompt_handling each accept: 'keep' (default — no change), 'detach' (clear after move), 'copy_to_target_board' (propagate role/prompts onto the target board).",
+  inputSchema: {
+    type: "object",
+    properties: {
+      task_id: { type: "string" },
+      column_id: { type: "string", description: "Target column (may be on a different board)." },
+      position: {
+        type: "number",
+        description: "Relative position (float). Defaults to append-to-end when omitted.",
+      },
+      role_handling: {
+        type: "string",
+        enum: ["keep", "detach", "copy_to_target_board"],
+        description: "'keep' (default): task retains its role_id. 'detach': task role_id is cleared. 'copy_to_target_board': role is set on the target board (if it has none) and its prompts are attached to the target board.",
+      },
+      prompt_handling: {
+        type: "string",
+        enum: ["keep", "detach", "copy_to_target_board"],
+        description: "'keep' (default): direct prompts stay on the task. 'detach': direct prompts are removed. 'copy_to_target_board': direct prompts are attached to the target board's board_prompts.",
+      },
+    },
+    required: ["task_id", "column_id"],
+    additionalProperties: false,
+  },
+  handler: async (args, { hub }) => {
+    const body: Record<string, unknown> = {
+      column_id: args.column_id as string,
+    };
+    if (typeof args.position === "number") body.position = args.position;
+    if (typeof args.role_handling === "string") body.role_handling = args.role_handling;
+    if (typeof args.prompt_handling === "string") body.prompt_handling = args.prompt_handling;
+    return hub.post(`/api/tasks/${args.task_id as string}/move-with-resolution`, body);
+  },
+};
+
 export const delete_task: ToolDefinition = {
   name: "delete_task",
   description: "Delete a task. This cannot be undone.",

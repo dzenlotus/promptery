@@ -13,6 +13,7 @@ import type {
   ImportStrategy,
   McpTool,
   MoveBoardToSpaceResult,
+  MoveWithResolutionInput,
   Prompt,
   PromptGroup,
   PromptGroupWithPrompts,
@@ -228,6 +229,11 @@ export const api = {
       request<TaskEvent[]>(
         limit ? `/api/tasks/${id}/events?limit=${limit}` : `/api/tasks/${id}/events`
       ),
+    moveWithResolution: (id: string, data: MoveWithResolutionInput) =>
+      request<Task>(`/api/tasks/${id}/move-with-resolution`, {
+        method: "POST",
+        body: json(data),
+      }),
   },
   prompts: primitiveResource<Prompt>("/api/prompts"),
   promptGroups: {

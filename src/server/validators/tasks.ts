@@ -41,3 +41,12 @@ export const addTaskSkillSchema = z.object({
 export const addTaskMcpToolSchema = z.object({
   mcp_tool_id: z.string().min(1),
 });
+
+const resolutionHandlingSchema = z.enum(["keep", "detach", "copy_to_target_board"]);
+
+export const moveTaskWithResolutionSchema = z.object({
+  column_id: z.string().min(1),
+  position: z.number().finite().optional(),
+  role_handling: resolutionHandlingSchema.default("keep"),
+  prompt_handling: resolutionHandlingSchema.default("keep"),
+});

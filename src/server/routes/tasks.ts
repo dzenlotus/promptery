@@ -7,6 +7,7 @@ import {
   createTaskSchema,
   updateTaskSchema,
   moveTaskSchema,
+  moveTaskWithResolutionSchema,
   setTaskRoleSchema,
   addTaskPromptSchema,
   addTaskSkillSchema,
@@ -321,6 +322,47 @@ tasksRoute.post("/:id/move", zValidator("json", moveTaskSchema), (c) => {
   });
   return c.json(q.getTask(getDb(), id));
 });
+
+/**
+ * Cross-board move with explicit role/prompt resolution. Extends the plain
+ * `move` endpoint with three strategies for `role_handling` and
+ * `prompt_handling`: "keep" (default), "detach", or "copy_to_target_board".
+ * For same-board moves, role/prompt resolution is a no-op even when set.
+ */
+tasksRoute.post(
+  "/:id/move-with-resolution",
+  zValidator("json", moveTaskWithResolutionSchema),
+  (c) => {
+    const id = c.req.param("id");
+    const { column_id, position, role_handling, prompt_handling } = c.req.valid("json");
+
+    const existing = q.getTask(getDb(), id);
+    if (!existing) return c.json({ error: "task not found" }, 404);
+
+    const column = q.getColumn(getDb(), column_id);
+    if (!column) return c.json({ error: "column not found" }, 404);
+
+    const moved = q.moveTaskWithResolution(getDb(), id, {
+      targetColumnId: column_id,
+      targetPosition: position,
+      roleHandling: role_handling,
+      promptHandling: prompt_handling,
+    });
+    if (!moved) return c.json({ error: "task not found" }, 404);
+
+    const full = q.getTask(getDb(), id)!;
+    bus.publish({
+      type: "task.moved",
+      data: {
+        boardId: moved.board_id,
+        taskId: moved.id,
+        columnId: column_id,
+        position: moved.position,
+      },
+    });
+    return c.json(full);
+  }
+);
 
 tasksRoute.delete("/:id", (c) => {
   const id = c.req.param("id");

@@ -245,6 +245,125 @@ export function moveTask(
   return getRawTask(db, id);
 }
 
+export type ResolutionHandling = "keep" | "detach" | "copy_to_target_board";
+
+export interface MoveWithResolutionInput {
+  targetColumnId: string;
+  targetPosition?: number;
+  roleHandling: ResolutionHandling;
+  promptHandling: ResolutionHandling;
+}
+
+/**
+ * Cross-board move with explicit role/prompt resolution.
+ *
+ * Performs the move then applies the caller-chosen resolution strategy for
+ * the task's own `role_id` and its direct-origin prompts:
+ *
+ *  keep                – no-op after move (default behaviour).
+ *  detach              – clear `role_id` (and its inherited primitives) after
+ *                        move, or remove all direct-origin prompts.
+ *  copy_to_target_board – assign the task's role to the target board's
+ *                         `role_id` field when the board has none yet; attach
+ *                         the role's own prompts to `board_prompts` on the
+ *                         target board. For prompt_handling: attach each
+ *                         direct-origin prompt to the target board's
+ *                         `board_prompts` (idempotent INSERT OR IGNORE).
+ *
+ * Returns null if the task or target column does not exist.
+ */
+export function moveTaskWithResolution(
+  db: Database,
+  taskId: string,
+  input: MoveWithResolutionInput
+): Task | null {
+  const tx = db.transaction((): Task | null => {
+    // Snapshot the task before the move so we have the original role_id and
+    // prompt list regardless of what happens during the move.
+    const before = getRawTask(db, taskId);
+    if (!before) return null;
+
+    const moved = moveTask(db, taskId, input.targetColumnId, input.targetPosition);
+    if (!moved) return null;
+
+    const targetBoardId = moved.board_id;
+
+    // ---- role_handling -------------------------------------------------
+    if (input.roleHandling === "detach" && moved.role_id) {
+      // Clear the role and strip its inherited primitives.
+      const origin = `role:${moved.role_id}`;
+      db.prepare("DELETE FROM task_prompts WHERE task_id = ? AND origin = ?").run(
+        taskId,
+        origin
+      );
+      db.prepare("DELETE FROM task_skills WHERE task_id = ? AND origin = ?").run(
+        taskId,
+        origin
+      );
+      db.prepare("DELETE FROM task_mcp_tools WHERE task_id = ? AND origin = ?").run(
+        taskId,
+        origin
+      );
+      db.prepare("UPDATE tasks SET role_id = ?, updated_at = ? WHERE id = ?").run(
+        null,
+        Date.now(),
+        taskId
+      );
+    } else if (input.roleHandling === "copy_to_target_board" && moved.role_id) {
+      const roleId = moved.role_id;
+
+      // Assign role to target board only when the board has no role yet.
+      const targetBoard = db
+        .prepare("SELECT role_id FROM boards WHERE id = ?")
+        .get(targetBoardId) as { role_id: string | null } | undefined;
+      if (targetBoard && targetBoard.role_id === null) {
+        db.prepare("UPDATE boards SET role_id = ?, updated_at = ? WHERE id = ?").run(
+          roleId,
+          Date.now(),
+          targetBoardId
+        );
+      }
+
+      // Attach the role's prompts to the target board (idempotent).
+      const rolePrompts = db
+        .prepare("SELECT prompt_id, position FROM role_prompts WHERE role_id = ? ORDER BY position")
+        .all(roleId) as { prompt_id: string; position: number }[];
+      const insertBoardPrompt = db.prepare(
+        `INSERT OR IGNORE INTO board_prompts (board_id, prompt_id, position)
+         VALUES (?, ?, COALESCE((SELECT MAX(position) FROM board_prompts WHERE board_id = ?), 0) + ?)`
+      );
+      rolePrompts.forEach(({ prompt_id }, i) => {
+        insertBoardPrompt.run(targetBoardId, prompt_id, targetBoardId, i + 1);
+      });
+    }
+
+    // ---- prompt_handling -----------------------------------------------
+    if (input.promptHandling === "detach") {
+      db.prepare(
+        "DELETE FROM task_prompts WHERE task_id = ? AND origin = 'direct'"
+      ).run(taskId);
+    } else if (input.promptHandling === "copy_to_target_board") {
+      // Collect the direct prompts that existed before the move.
+      const directPrompts = db
+        .prepare(
+          "SELECT prompt_id, position FROM task_prompts WHERE task_id = ? AND origin = 'direct' ORDER BY position"
+        )
+        .all(taskId) as { prompt_id: string; position: number }[];
+      const insertBoardPrompt = db.prepare(
+        `INSERT OR IGNORE INTO board_prompts (board_id, prompt_id, position)
+         VALUES (?, ?, COALESCE((SELECT MAX(position) FROM board_prompts WHERE board_id = ?), 0) + ?)`
+      );
+      directPrompts.forEach(({ prompt_id }, i) => {
+        insertBoardPrompt.run(targetBoardId, prompt_id, targetBoardId, i + 1);
+      });
+    }
+
+    return getRawTask(db, taskId);
+  });
+
+  return tx();
+}
+
 export function deleteTask(db: Database, id: string): boolean {
   const result = db.prepare("DELETE FROM tasks WHERE id = ?").run(id);
   return result.changes > 0;
