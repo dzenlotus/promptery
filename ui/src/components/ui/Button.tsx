@@ -21,7 +21,7 @@ const sizes: Record<Size, string> = {
 
 const variants: Record<Variant, string> = {
   primary:
-    "bg-[var(--color-accent)] text-white hover:bg-[var(--color-accent-hover)] active:bg-[var(--color-accent-active)]",
+    "bg-[var(--color-accent)] text-[var(--color-on-accent)] hover:bg-[var(--color-accent-hover)] active:bg-[var(--color-accent-active)]",
   secondary:
     "bg-[var(--hover-overlay)] text-[var(--color-text)] hover:bg-[var(--active-overlay)] active:bg-[var(--active-overlay)]",
   ghost:

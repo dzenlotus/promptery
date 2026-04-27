@@ -46,6 +46,24 @@
   --hover-overlay: rgba(255, 255, 255, 0.05);
   --active-overlay: rgba(255, 255, 255, 0.09);
 
+  /* Scrim — modal/dialog backdrop tint. Kept light so backdrop-blur carries
+     the visual separation; a heavy tint just dims the glass effect. */
+  --color-scrim: rgba(0, 0, 0, 0.22);
+
+  /* Scrollbar thumb — sits on glass/surface backgrounds. */
+  --color-scrollbar-thumb: rgba(255, 255, 255, 0.15);
+  --color-scrollbar-thumb-hover: rgba(255, 255, 255, 0.30);
+
+  /* Text on filled accent/warning surfaces (primary button, dev badge, etc). */
+  --color-on-accent: #ffffff;
+  --color-on-warning: #000000;
+
+  /* Preview tile caption — sits over arbitrary background images/gradients. */
+  --color-preview-caption-bg: rgba(0, 0, 0, 0.60);
+  --color-preview-caption-text: #ffffff;
+  --color-preview-badge-bg: rgba(0, 0, 0, 0.50);
+  --color-preview-badge-text: #ffffff;
+
   /* Typography. */
   --font-sans: "Nunito Variable", -apple-system, system-ui, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
@@ -116,6 +134,19 @@ body,
 
   --hover-overlay: rgba(15, 15, 15, 0.05);
   --active-overlay: rgba(15, 15, 15, 0.09);
+
+  --color-scrim: rgba(0, 0, 0, 0.14);
+
+  --color-scrollbar-thumb: rgba(15, 15, 15, 0.15);
+  --color-scrollbar-thumb-hover: rgba(15, 15, 15, 0.30);
+
+  --color-on-accent: #ffffff;
+  --color-on-warning: #000000;
+
+  --color-preview-caption-bg: rgba(0, 0, 0, 0.55);
+  --color-preview-caption-text: #ffffff;
+  --color-preview-badge-bg: rgba(0, 0, 0, 0.45);
+  --color-preview-badge-text: #ffffff;
 
   --shadow-sm: 0 1px 2px rgba(15, 15, 15, 0.06);
   --shadow-md: 0 4px 16px rgba(15, 15, 15, 0.08);

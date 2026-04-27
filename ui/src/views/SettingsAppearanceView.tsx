@@ -239,13 +239,13 @@ function PresetGrid(props: PresetGridProps) {
             )}
           >
             <div className="absolute inset-0" style={style} />
-            <div className="absolute inset-x-0 bottom-0 px-2 py-1.5 bg-black/60">
-              <span className="block truncate text-[11px] text-white font-medium tracking-tight">
+            <div className="absolute inset-x-0 bottom-0 px-2 py-1.5 bg-[var(--color-preview-caption-bg)]">
+              <span className="block truncate text-[11px] text-[var(--color-preview-caption-text)] font-medium tracking-tight">
                 {p.name}
               </span>
             </div>
             {type === "animated" && (
-              <span className="absolute top-1.5 right-1.5 text-[9px] tracking-[0.1em] bg-black/50 text-white px-1.5 py-0.5 rounded backdrop-blur-sm uppercase font-medium">
+              <span className="absolute top-1.5 right-1.5 text-[9px] tracking-[0.1em] bg-[var(--color-preview-badge-bg)] text-[var(--color-preview-badge-text)] px-1.5 py-0.5 rounded backdrop-blur-sm uppercase font-medium">
                 Animated
               </span>
             )}

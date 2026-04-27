@@ -39,7 +39,7 @@ export function Dialog({
         {/* Overlay carries the heavy blur — 24px frost + a light vignette.
             The tint is deliberately low (20%) because the blur alone is what
             separates modal from canvas; a heavier tint just dims the result. */}
-        <RadixDialog.Overlay className="fixed inset-0 z-40 bg-black/20 backdrop-blur-xl data-[state=open]:animate-in data-[state=open]:fade-in" />
+        <RadixDialog.Overlay className="fixed inset-0 z-40 bg-[var(--color-scrim)] backdrop-blur-xl data-[state=open]:animate-in data-[state=open]:fade-in" />
         <RadixDialog.Content
           onPointerDownOutside={(e) => {
             if (lockOutsideClick) e.preventDefault();

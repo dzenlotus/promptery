@@ -22,7 +22,7 @@ export function DevModeIndicator() {
   return (
     <div
       data-testid="dev-mode-badge"
-      className="pointer-events-none fixed top-2 right-2 z-50 rounded-full bg-amber-500/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-black shadow"
+      className="pointer-events-none fixed top-2 right-2 z-50 rounded-full bg-amber-500/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-on-warning)] shadow"
     >
       Dev
     </div>

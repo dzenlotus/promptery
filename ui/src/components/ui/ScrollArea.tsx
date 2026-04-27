@@ -119,7 +119,7 @@ const ScrollBar = forwardRef<HTMLDivElement, ScrollBarProps>(
         <RadixScrollArea.Thumb
           className={cn(
             "relative flex-1 rounded-full transition-colors duration-150",
-            "bg-white/15 hover:bg-white/30",
+            "bg-[var(--color-scrollbar-thumb)] hover:bg-[var(--color-scrollbar-thumb-hover)]",
             // Invisible ≥44×44 hit target so the 3px bar is still easy to
             // grab — Radix recommends this pattern for thin scrollbars.
             "before:content-[''] before:absolute before:top-1/2 before:left-1/2",
