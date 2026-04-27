@@ -337,6 +337,30 @@ describe("prompt groups API", () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it("DELETE /:id/prompts/:promptId removes membership but leaves prompt intact", async () => {
+    const p = (await (await api("POST", "/api/prompts", { name: "pg-remove-member" })).json()) as {
+      id: string;
+    };
+    const g = (await (
+      await api("POST", "/api/prompt-groups", {
+        name: "pg-remove-test",
+        prompt_ids: [p.id],
+      })
+    ).json()) as { id: string; prompts: { id: string }[]; prompt_count: number };
+
+    expect(g.prompt_count).toBe(1);
+
+    const del = await api("DELETE", `/api/prompt-groups/${g.id}/prompts/${p.id}`);
+    expect(del.status).toBe(200);
+    const updated = (await del.json()) as { prompts: { id: string }[]; prompt_count: number };
+    expect(updated.prompts).toHaveLength(0);
+    expect(updated.prompt_count).toBe(0);
+
+    // The prompt itself must still exist.
+    const promptStillThere = await api("GET", `/api/prompts/${p.id}`);
+    expect(promptStillThere.status).toBe(200);
+  });
 });
 
 describe("inheritance API", () => {

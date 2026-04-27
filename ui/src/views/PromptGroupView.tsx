@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useParams, useLocation } from "wouter";
-import { Folder, GripVertical } from "lucide-react";
+import { Folder, GripVertical, MinusCircle } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -248,6 +248,37 @@ interface GroupMainAreaProps {
 
 function GroupMainArea({ group, onOpenPrompt }: GroupMainAreaProps) {
   const color = group.color || "#7a746a";
+  const qc = useQueryClient();
+
+  const removeMutation = useMutation({
+    mutationFn: ({ promptId }: { promptId: string }) =>
+      api.promptGroups.removePrompt(group.id, promptId),
+    onMutate: async ({ promptId }) => {
+      const key = qk.promptGroup(group.id);
+      await qc.cancelQueries({ queryKey: key });
+      const previous = qc.getQueryData(key);
+      qc.setQueryData(key, {
+        ...group,
+        prompts: group.prompts.filter((p) => p.id !== promptId),
+        prompt_count: group.prompt_count - 1,
+        member_ids: group.member_ids.filter((id) => id !== promptId),
+      });
+      return { previous };
+    },
+    onError: (err: Error, _v, ctx) => {
+      if (ctx?.previous) qc.setQueryData(qk.promptGroup(group.id), ctx.previous);
+      toast.error(err.message || "Failed to remove prompt from group");
+    },
+    onSuccess: (_data, { promptId }) => {
+      const promptName = group.prompts.find((p) => p.id === promptId)?.name ?? "Prompt";
+      toast.success(`Removed "${promptName}" from "${group.name}"`);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: qk.promptGroup(group.id) });
+      qc.invalidateQueries({ queryKey: qk.promptGroups });
+    },
+  });
+
   const { setNodeRef: setDropRef, isOver } = useDroppable({
     id: DROP_ZONE_ID,
     data: { type: "group-drop", groupId: group.id },
@@ -307,6 +338,7 @@ function GroupMainArea({ group, onOpenPrompt }: GroupMainAreaProps) {
                   key={p.id}
                   prompt={p}
                   onOpen={() => onOpenPrompt(p.id)}
+                  onRemove={() => removeMutation.mutate({ promptId: p.id })}
                 />
               ))}
             </ul>
@@ -321,10 +353,14 @@ function GroupMainArea({ group, onOpenPrompt }: GroupMainAreaProps) {
 function SortableMemberRow({
   prompt,
   onOpen,
+  onRemove,
 }: {
   prompt: PromptInGroup;
   onOpen: () => void;
+  onRemove: () => void;
 }) {
+  const [confirming, setConfirming] = useState(false);
+
   const {
     attributes,
     listeners,
@@ -348,7 +384,7 @@ function SortableMemberRow({
       }}
       className={cn(
         "group rounded-lg border bg-[var(--hover-overlay)] px-3 py-3",
-        "grid grid-cols-[auto_1fr] items-start gap-3",
+        "grid grid-cols-[auto_1fr_auto] items-start gap-3",
         "transition-colors",
         isDragging
           ? "border-[var(--color-accent)]"
@@ -402,6 +438,64 @@ function SortableMemberRow({
           <p className="text-[12px] text-[var(--color-text-muted)] line-clamp-2 whitespace-pre-wrap">
             {prompt.content}
           </p>
+        )}
+      </div>
+      {/* Remove-from-group action. Shows as a MinusCircle icon on hover;
+          first click enters a brief inline "Sure?" confirmation so an
+          accidental brush doesn't drop the membership. The prompt itself
+          is never deleted — only the membership row. */}
+      <div className={cn("mt-0.5 flex items-center gap-1", "opacity-0 group-hover:opacity-100 transition-opacity")}>
+        {confirming ? (
+          <>
+            <button
+              type="button"
+              data-testid={`prompt-group-remove-confirm-${prompt.id}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setConfirming(false);
+                onRemove();
+              }}
+              className={cn(
+                "h-6 px-2 text-[11px] font-medium rounded",
+                "bg-[var(--color-danger)] text-white",
+                "hover:opacity-90 transition-opacity"
+              )}
+            >
+              Remove
+            </button>
+            <button
+              type="button"
+              data-testid={`prompt-group-remove-cancel-${prompt.id}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setConfirming(false);
+              }}
+              className={cn(
+                "h-6 px-2 text-[11px] font-medium rounded",
+                "text-[var(--color-text-muted)] hover:text-[var(--color-text)]",
+                "transition-colors"
+              )}
+            >
+              Cancel
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            aria-label={`Remove ${prompt.name} from group`}
+            data-testid={`prompt-group-remove-${prompt.id}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setConfirming(true);
+            }}
+            className={cn(
+              "h-6 w-6 inline-flex items-center justify-center rounded",
+              "text-[var(--color-text-subtle)] hover:text-[var(--color-danger)]",
+              "transition-colors"
+            )}
+          >
+            <MinusCircle size={14} />
+          </button>
         )}
       </div>
     </li>
