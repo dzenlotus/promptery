@@ -4,8 +4,8 @@ import { toast } from "sonner";
 import { Dialog } from "../ui/Dialog.js";
 import { Input } from "../ui/Input.js";
 import { Button } from "../ui/Button.js";
-import { ColorSwatchGrid } from "../sidebar/ColorSwatchGrid.js";
-import { ENTITY_COLORS } from "../sidebar/colors.js";
+import { PalettePicker } from "../common/PalettePicker.js";
+import { paletteColorForName } from "../../lib/palette.js";
 import { api, ApiError } from "../../lib/api.js";
 import { qk } from "../../lib/query.js";
 import { usePrompts } from "../../hooks/usePrompts.js";
@@ -28,7 +28,8 @@ interface Props {
   group?: PromptGroup | PromptGroupWithPrompts | null;
 }
 
-const DEFAULT_COLOR = ENTITY_COLORS[5] ?? "#8b5cf6";
+/** Fallback used before the user has typed a name. */
+const FALLBACK_COLOR = "#8b5cf6";
 
 export function PromptGroupDialog({ open, onOpenChange, group }: Props) {
   const qc = useQueryClient();
@@ -44,10 +45,17 @@ export function PromptGroupDialog({ open, onOpenChange, group }: Props) {
   );
 
   const [name, setName] = useState("");
-  const [color, setColor] = useState<string | null>(DEFAULT_COLOR);
+  // null means "auto" — derive from name via palette. A non-null value means
+  // the user has manually chosen a color (including in edit mode).
+  const [colorOverride, setColorOverride] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [filter, setFilter] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
+
+  // Resolved color: use override when set, otherwise derive from name.
+  const resolvedColor = colorOverride ?? (name.trim() ? paletteColorForName(name.trim()) : FALLBACK_COLOR);
+  // The color we ultimately persist is always the resolved value.
+  const color: string | null = resolvedColor;
 
   // Seed form state when the dialog opens so we don't leak draft state
   // between consecutive opens on different groups.
@@ -57,12 +65,13 @@ export function PromptGroupDialog({ open, onOpenChange, group }: Props) {
     setFormError(null);
     if (group) {
       setName(group.name);
-      setColor(group.color ?? null);
+      // In edit mode the group already has a saved color; treat it as an override.
+      setColorOverride(group.color ?? null);
       const hasPrompts = "prompts" in group && Array.isArray(group.prompts);
       setSelectedIds(hasPrompts ? group.prompts.map((p) => p.id) : []);
     } else {
       setName("");
-      setColor(DEFAULT_COLOR);
+      setColorOverride(null);
       setSelectedIds([]);
     }
   }, [open, group]);
@@ -176,9 +185,9 @@ export function PromptGroupDialog({ open, onOpenChange, group }: Props) {
 
         <div className="grid gap-1.5">
           <label className="text-[12px] text-[var(--color-text-muted)]">Color</label>
-          <ColorSwatchGrid
-            value={color ?? DEFAULT_COLOR}
-            onPick={(c) => setColor(c)}
+          <PalettePicker
+            value={resolvedColor}
+            onPick={(c) => setColorOverride(c)}
           />
         </div>
 

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/Popover.js";
 import { ColorDot } from "./ColorDot.js";
-import { ColorSwatchGrid } from "./ColorSwatchGrid.js";
+import { PalettePicker } from "../common/PalettePicker.js";
 
 interface Props {
   value: string;
@@ -24,7 +24,7 @@ export function HeaderColorPicker({ value, onChange }: Props) {
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="p-1 min-w-0 w-auto">
-        <ColorSwatchGrid
+        <PalettePicker
           value={value}
           onPick={(c) => {
             onChange(c);

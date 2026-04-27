@@ -5,6 +5,7 @@ import { HeaderColorPicker } from "../sidebar/HeaderColorPicker.js";
 import { PromptsMultiSelector } from "../common/PromptsMultiSelector.js";
 import { usePromptGroups } from "../../hooks/usePromptGroups.js";
 import { DRAFT_COLOR } from "../sidebar/colors.js";
+import { paletteColorForName } from "../../lib/palette.js";
 import { cn } from "../../lib/cn.js";
 import { relativeTime } from "../../lib/time.js";
 import { ApiError } from "../../lib/api.js";
@@ -147,7 +148,12 @@ export function RoleEditor({
         const created = await onCreate({
           name: trimmedName,
           content: values.content,
-          color: values.color || DRAFT_COLOR,
+          // Use the user-picked color if it differs from the draft sentinel;
+          // otherwise fall back to the deterministic palette color for this name.
+          color:
+            values.color && values.color !== DRAFT_COLOR
+              ? values.color
+              : paletteColorForName(trimmedName),
           promptIds: localPromptIds,
         });
         onCreatedDraft?.(created);
