@@ -35,6 +35,8 @@ import {
   listBackups,
   restoreBackup,
 } from "./db/backup.js";
+import { runMigrationsSafe } from "./db/migrationRunner.js";
+import { getDbPath, ensureHomeDir } from "./lib/paths.js";
 
 function loadPackageVersion(): string {
   const pkgUrl = new URL("../package.json", import.meta.url);
@@ -483,6 +485,71 @@ program
         `✗ Delete failed: ${err instanceof Error ? err.message : String(err)}`
       );
       process.exit(1);
+    }
+  });
+
+// -------- migrate --------
+
+program
+  .command("migrate")
+  .description(
+    "Run pending database migrations with automatic snapshot and rollback on failure."
+  )
+  .action(async () => {
+    ensureHomeDir();
+    const dbPath = getDbPath();
+
+    // Import Database lazily so the CLI startup stays fast when no migration
+    // is needed (the common case for bridges/agents).
+    const Database = (await import("better-sqlite3")).default;
+    const { readFileSync } = await import("node:fs");
+
+    const db = new Database(dbPath);
+    db.pragma("journal_mode = WAL");
+    db.pragma("foreign_keys = ON");
+
+    // Apply schema so the _migrations table exists even on a brand-new DB.
+    const schemaUrl = new URL("./db/schema.sql", import.meta.url);
+    db.exec(readFileSync(schemaUrl, "utf-8"));
+
+    // Run the migration wizard with verbose callbacks.
+    console.log("Running migration wizard...\n");
+
+    const result = await runMigrationsSafe(db, dbPath, {
+      onStep: (name) => console.log(`  → applying: ${name}`),
+      onSnapshot: (snapshotPath) =>
+        console.log(`  snapshot:   ${snapshotPath}`),
+      onRollback: (reason) =>
+        console.error(`\n  ROLLBACK triggered: ${reason}`),
+    });
+
+    db.close();
+
+    console.log("");
+
+    if (result.status === "rolled-back") {
+      console.error(`✗ Migration failed — DB rolled back to snapshot.`);
+      if (result.snapshot) console.error(`  Snapshot: ${result.snapshot}`);
+      if (result.error) console.error(`  Error:    ${result.error}`);
+      process.exit(1);
+    }
+
+    if (result.applied.length === 0) {
+      console.log("✓ No pending migrations — DB is up to date.");
+    } else {
+      console.log(`✓ Applied ${result.applied.length} migration(s):`);
+      for (const name of result.applied) {
+        console.log(`    ${name}`);
+      }
+      if (result.snapshot) {
+        console.log(`  Snapshot: ${result.snapshot}`);
+      }
+    }
+
+    if (result.skipped.length > 0) {
+      console.log(
+        `  (${result.skipped.length} migration(s) already applied, skipped)`
+      );
     }
   });
 

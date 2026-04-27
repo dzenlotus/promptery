@@ -158,4 +158,7 @@ export type ServerEvent =
   | {
       type: "task.event_recorded";
       data: { boardId: string; taskId: string; event: TaskEvent };
-    };
+    }
+  | { type: "maintenance.migration_step"; data: { name: string } }
+  | { type: "maintenance.migration_snapshot"; data: { snapshotPath: string } }
+  | { type: "maintenance.migration_rolledback"; data: { reason: string } };

@@ -1,4 +1,4 @@
-import { getDb } from "./db/index.js";
+import { initDb } from "./db/index.js";
 import { maybeAutoBackup } from "./db/backup.js";
 import { startServer, type ServerHandle } from "./server/index.js";
 import {
@@ -38,7 +38,7 @@ export async function runHub(options: RunHubOptions = {}): Promise<HubHandle> {
     );
   }
 
-  const db = getDb();
+  const db = await initDb();
 
   // Rolling daily DB snapshot into ~/.promptery/backups, one at most per 24h,
   // with a 30-day retention window. Failures are logged and don't block start.

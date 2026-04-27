@@ -17,6 +17,7 @@ import promptGroupsRoute from "./routes/promptGroups.js";
 import tagsRoute from "./routes/tags.js";
 import metaRoute from "./routes/meta.js";
 import { createDataRouter } from "./routes/data.js";
+import maintenanceRoute from "./routes/maintenance.js";
 import { errorHandler } from "./middleware/error.js";
 import { handleWsClose, handleWsOpen } from "./events/websocket.js";
 import { findFreePort } from "../lib/port.js";
@@ -46,6 +47,7 @@ export function createApp() {
   app.route("/api/tags", tagsRoute);
   app.route("/api/meta", metaRoute);
   app.route("/api/data", createDataRouter(getAppVersion()));
+  app.route("/api/maintenance", maintenanceRoute);
 
   app.get(
     "/ws",

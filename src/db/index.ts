@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { nanoid } from "nanoid";
 import { ensureHomeDir, getDbPath } from "../lib/paths.js";
 import { runMigrations } from "./migrations.js";
+import { runMigrationsSafe, type MigrationRunnerOptions } from "./migrationRunner.js";
 
 let dbInstance: Database.Database | null = null;
 
@@ -27,6 +28,56 @@ export function getDb(): Database.Database {
   const schemaUrl = new URL("./schema.sql", import.meta.url);
   db.exec(readFileSync(schemaUrl, "utf-8"));
   runMigrations(db);
+
+  seedDefaults(db);
+
+  dbInstance = db;
+  return db;
+}
+
+/**
+ * Async variant of DB initialisation for the hub startup path.
+ *
+ * Runs the migration wizard (snapshot → migrate → verify → rollback on
+ * failure) before returning the singleton. If migrations succeed, the
+ * singleton is set and subsequent `getDb()` calls return the same instance.
+ *
+ * If migrations fail AND a rollback restores the file, this function rethrows
+ * — the hub should refuse to start so the user is notified rather than running
+ * against a potentially inconsistent schema.
+ *
+ * @param opts  Optional migration hooks (onStep, onSnapshot, onRollback).
+ */
+export async function initDb(
+  opts: MigrationRunnerOptions = {}
+): Promise<Database.Database> {
+  if (dbInstance) return dbInstance;
+
+  ensureHomeDir();
+  const dbPath = getDbPath();
+  const db = new Database(dbPath);
+  db.pragma("journal_mode = WAL");
+  db.pragma("foreign_keys = ON");
+
+  const schemaUrl = new URL("./schema.sql", import.meta.url);
+  db.exec(readFileSync(schemaUrl, "utf-8"));
+
+  const result = await runMigrationsSafe(db, dbPath, opts);
+
+  if (result.status === "rolled-back") {
+    db.close();
+    throw new Error(
+      `[promptery] Hub startup aborted — migration failed and DB was rolled back. ` +
+        `${result.error ?? ""} ` +
+        `Snapshot preserved at: ${result.snapshot ?? "(none)"}`
+    );
+  }
+
+  if (result.applied.length > 0) {
+    console.error(
+      `[promptery] applied ${result.applied.length} migration(s): ${result.applied.join(", ")}`
+    );
+  }
 
   seedDefaults(db);
 
