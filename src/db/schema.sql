@@ -255,3 +255,25 @@ CREATE TABLE IF NOT EXISTS task_events (
 
 CREATE INDEX IF NOT EXISTS idx_task_events_task_created
   ON task_events(task_id, created_at DESC);
+
+-- Tags — flat, globally-unique label layer for prompts. Many-to-many: a
+-- prompt has zero or more tags, a tag applies to zero or more prompts.
+-- Tags don't participate in inheritance and only attach to prompts.
+CREATE TABLE IF NOT EXISTS tags (
+  id TEXT PRIMARY KEY NOT NULL,
+  name TEXT NOT NULL UNIQUE,
+  color TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS prompt_tags (
+  prompt_id TEXT NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
+  tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+  added_at INTEGER NOT NULL,
+  PRIMARY KEY (prompt_id, tag_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_prompt_tags_tag ON prompt_tags(tag_id);
+CREATE INDEX IF NOT EXISTS idx_prompt_tags_prompt ON prompt_tags(prompt_id);
+CREATE INDEX IF NOT EXISTS idx_tags_name ON tags(name);

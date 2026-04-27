@@ -94,6 +94,9 @@ export function PromptsView() {
   const [selectedId, setSelectedId] = useState<string | null>(routeId);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Prompt | null>(null);
+  // Single-tag filter — `null` means the full list. State lives here (not
+  // in URL) because the filter is conversational, not a permalink concern.
+  const [activeTagId, setActiveTagId] = useState<string | null>(null);
 
   // URL is the source of truth: whenever the route id changes (direct
   // navigation, back/forward, deep link, modal-driven create), reconcile.
@@ -256,6 +259,8 @@ export function PromptsView() {
               const p = prompts.find((x) => x.id === id);
               if (p) setDeleteTarget(p);
             }}
+            activeTagId={activeTagId}
+            onActiveTagChange={setActiveTagId}
           />
         }
         mainContent={

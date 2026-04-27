@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Tag as TagIcon } from "lucide-react";
 import { MilkdownEditor } from "../editor/MilkdownEditor.js";
 import { Button } from "../ui/Button.js";
 import { ScrollArea } from "../ui/ScrollArea.js";
 import { HeaderColorPicker } from "../sidebar/HeaderColorPicker.js";
+import { TagChip } from "./TagChip.js";
+import { PromptTagPicker } from "./PromptTagPicker.js";
 import { cn } from "../../lib/cn.js";
 import { relativeTime } from "../../lib/time.js";
 import { ApiError } from "../../lib/api.js";
 import { validateEntityName } from "../../lib/validation.js";
+import { usePromptTags } from "../../hooks/useTags.js";
 import type { Prompt } from "../../lib/types.js";
 
 interface Props {
@@ -57,6 +61,8 @@ export function PromptEditor({ prompt, onUpdate }: Props) {
   const [hasTyped, setHasTyped] = useState(false);
   const [attemptedSave, setAttemptedSave] = useState(false);
   const [serverNameError, setServerNameError] = useState<string | null>(null);
+  const [tagPickerOpen, setTagPickerOpen] = useState(false);
+  const promptTags = usePromptTags(prompt.id);
   const nameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -104,6 +110,7 @@ export function PromptEditor({ prompt, onUpdate }: Props) {
   const metaText = `Updated ${relativeTime(prompt.updated_at)}`;
 
   return (
+    <>
     <div
       data-testid="prompt-editor"
       className="grid grid-rows-[auto_1fr_auto] h-full min-h-0 min-w-0"
@@ -185,6 +192,29 @@ export function PromptEditor({ prompt, onUpdate }: Props) {
               )}
             />
           </div>
+
+          <div className="mt-2 flex items-center flex-wrap gap-1.5">
+            <span className="text-[10px] uppercase tracking-[0.1em] font-medium text-[var(--color-text-subtle)] mr-1">
+              Tags
+            </span>
+            {promptTags.map((t) => (
+              <TagChip key={t.id} tag={t} />
+            ))}
+            <button
+              type="button"
+              data-testid="prompt-editor-edit-tags"
+              onClick={() => setTagPickerOpen(true)}
+              className={cn(
+                "inline-flex items-center gap-1 px-1.5 h-5 rounded-full",
+                "border border-dashed border-[var(--color-border)]",
+                "text-[10px] text-[var(--color-text-muted)] hover:text-[var(--color-text)]",
+                "transition-colors"
+              )}
+            >
+              <TagIcon size={10} />
+              {promptTags.length === 0 ? "Add tags" : "Edit"}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -213,5 +243,12 @@ export function PromptEditor({ prompt, onUpdate }: Props) {
         </div>
       </div>
     </div>
+    <PromptTagPicker
+      open={tagPickerOpen}
+      onOpenChange={setTagPickerOpen}
+      prompt={prompt}
+      currentTags={promptTags}
+    />
+    </>
   );
 }

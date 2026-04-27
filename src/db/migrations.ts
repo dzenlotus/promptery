@@ -39,6 +39,7 @@ export function runMigrations(db: Database, opts: RunMigrationsOptions = {}): vo
   runMigration(db, "010_board_position", apply010BoardPosition);
   runMigration(db, "011_prompt_short_description", apply011PromptShortDescription);
   runMigration(db, "012_task_events", apply012TaskEvents);
+  runMigration(db, "013_prompt_tags", apply013PromptTags);
   backfillDefaultColumnsForEmptyBoards(db);
 }
 
@@ -560,6 +561,18 @@ function apply011PromptShortDescription(db: Database): void {
  */
 function apply012TaskEvents(db: Database): void {
   const sqlUrl = new URL("./migrations/012_task_events.sql", import.meta.url);
+  const sql = readFileSync(sqlUrl, "utf-8");
+  db.exec(sql);
+}
+
+/**
+ * Apply 013: stand up the tags + prompt_tags tables. Additive only — no
+ * data backfill is meaningful since pre-existing prompts have no tags
+ * yet. Schema.sql also declares both tables on fresh installs so first-run
+ * tests see them without needing migrations.
+ */
+function apply013PromptTags(db: Database): void {
+  const sqlUrl = new URL("./migrations/013_prompt_tags.sql", import.meta.url);
   const sql = readFileSync(sqlUrl, "utf-8");
   db.exec(sql);
 }

@@ -235,6 +235,30 @@ export function projectPromptGroupDetail(group: unknown): MinimalEntity {
   };
 }
 
+// ── Tags ──────────────────────────────────────────────────────────────────
+
+const TAG_LIST_KEYS = ["id", "name", "color", "prompt_count"] as const;
+
+export function projectTagList(tags: unknown): MinimalEntity[] {
+  if (!Array.isArray(tags)) return [];
+  return tags.map((t) => pick(t as Record<string, unknown>, TAG_LIST_KEYS));
+}
+
+/**
+ * Detail shape: tag identity + prompt_ids array (alphabetical). Agents
+ * who need full prompt bodies iterate prompt_ids and call get_prompt.
+ */
+export function projectTagDetail(tag: unknown): MinimalEntity {
+  const t = (tag ?? {}) as Record<string, unknown>;
+  const prompts = Array.isArray(t.prompts) ? t.prompts : [];
+  return {
+    ...pick(t, ["id", "name", "color"]),
+    prompt_ids: prompts
+      .map((p) => (p as Record<string, unknown>).id)
+      .filter((id): id is string => typeof id === "string"),
+  };
+}
+
 // ── Generic helpers ───────────────────────────────────────────────────────
 
 /**

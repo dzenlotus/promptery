@@ -119,15 +119,30 @@ describe("migration 004", () => {
       .all();
     expect(tm).toEqual([{ mcp_tool_id: "tg-mcp", origin: "direct" }]);
 
-    // Old tables dropped
-    const tagsTable = db
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='tags'")
-      .get();
+    // Old `task_tags` table is dropped by 004. The `tags` table is also
+    // dropped by 004 — and then migration 013 re-creates it with the new
+    // prompt-tag schema (no `kind` column, joined via `prompt_tags`). So
+    // the legacy schema is gone, the new tables exist, and `task_tags`
+    // stays gone.
     const taskTagsTable = db
       .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='task_tags'")
       .get();
-    expect(tagsTable).toBeUndefined();
     expect(taskTagsTable).toBeUndefined();
+
+    const tagCols = db.prepare("PRAGMA table_info(tags)").all() as {
+      name: string;
+    }[];
+    // 013 schema: id, name, color, created_at, updated_at — no `kind`.
+    expect(tagCols.some((c) => c.name === "kind")).toBe(false);
+    expect(tagCols.map((c) => c.name).sort()).toEqual(
+      ["color", "created_at", "id", "name", "updated_at"].sort()
+    );
+    const promptTagsTable = db
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='prompt_tags'"
+      )
+      .get();
+    expect(promptTagsTable).toBeDefined();
   });
 
   it("is idempotent — second run is a no-op", () => {

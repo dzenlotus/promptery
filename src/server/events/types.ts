@@ -7,6 +7,7 @@ import type { Skill } from "../../db/queries/skills.js";
 import type { McpTool } from "../../db/queries/mcpTools.js";
 import type { Role, RoleWithRelations } from "../../db/queries/roles.js";
 import type { PromptGroup } from "../../db/queries/promptGroups.js";
+import type { Tag } from "../../db/queries/tags.js";
 import type { TaskEvent } from "../../db/queries/taskEvents.js";
 
 export type ServerEvent =
@@ -147,6 +148,13 @@ export type ServerEvent =
     }
   | { type: "prompt_group.deleted"; data: { groupId: string } }
   | { type: "prompt_group.reordered"; data: { ids: string[] } }
+  | { type: "tag.created"; data: { tagId: string; tag: Tag } }
+  | { type: "tag.updated"; data: { tagId: string; tag: Tag } }
+  | { type: "tag.deleted"; data: { tagId: string } }
+  | {
+      type: "prompt.tags_changed";
+      data: { promptId: string; tagIds: string[] };
+    }
   | {
       type: "task.event_recorded";
       data: { boardId: string; taskId: string; event: TaskEvent };

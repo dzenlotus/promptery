@@ -172,6 +172,27 @@ export function useWebSocket(): void {
           qc.invalidateQueries({ queryKey: qk.promptGroups });
           qc.invalidateQueries({ queryKey: qk.promptGroup(evt.data.groupId) });
           break;
+        case "tag.created":
+        case "tag.deleted":
+          // Both events change the tag list and may add/remove chips on
+          // every prompt row, so the per-prompt tag map needs a refresh too.
+          qc.invalidateQueries({ queryKey: qk.tags });
+          qc.invalidateQueries({ queryKey: qk.tagsByPrompt });
+          break;
+        case "tag.updated":
+          qc.invalidateQueries({ queryKey: qk.tags });
+          qc.invalidateQueries({ queryKey: qk.tag(evt.data.tagId) });
+          // Updates that change membership (set/add/remove) also fire a
+          // per-prompt event, but a rename/recolor is broadcast through
+          // tag.updated alone — invalidate the chip cache so stale labels
+          // don't linger.
+          qc.invalidateQueries({ queryKey: qk.tagsByPrompt });
+          break;
+        case "prompt.tags_changed":
+          // Fired alongside tag.* membership changes — refresh the
+          // sidebar chip map without a separate tag.updated round trip.
+          qc.invalidateQueries({ queryKey: qk.tagsByPrompt });
+          break;
         case "task.event_recorded":
           // Prepend the new event so an open dialog updates without refetching
           // — the route returns newest-first, matching this insertion order.

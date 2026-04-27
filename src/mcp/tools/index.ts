@@ -6,6 +6,7 @@ import * as tasksTools from "./tasks.js";
 import * as rolesTools from "./roles.js";
 import * as promptsTools from "./prompts.js";
 import * as promptGroupsTools from "./promptGroups.js";
+import * as tagsTools from "./tags.js";
 import * as uiTools from "./ui.js";
 
 export interface McpContext {
@@ -50,6 +51,7 @@ export const allTools: ToolDefinition[] = [
   ...collectTools(rolesTools),
   ...collectTools(promptsTools),
   ...collectTools(promptGroupsTools),
+  ...collectTools(tagsTools),
   ...collectTools(uiTools),
 ];
 

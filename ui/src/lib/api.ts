@@ -17,12 +17,15 @@ import type {
   Prompt,
   PromptGroup,
   PromptGroupWithPrompts,
+  PromptWithTags,
   ResolvedTaskContext,
   Role,
   RoleWithRelations,
   Skill,
   Space,
   SpaceWithBoards,
+  Tag,
+  TagWithPrompts,
   Task,
   TaskEvent,
   UpdatePrimitiveInput,
@@ -272,6 +275,39 @@ export const api = {
         method: "POST",
         body: json({ ids }),
       }),
+  },
+  tags: {
+    list: () => request<Tag[]>("/api/tags"),
+    get: (id: string) => request<TagWithPrompts>(`/api/tags/${id}`),
+    create: (data: { name: string; color?: string | null; prompt_ids?: string[] }) =>
+      request<TagWithPrompts>("/api/tags", {
+        method: "POST",
+        body: json(data),
+      }),
+    update: (id: string, patch: { name?: string; color?: string | null }) =>
+      request<TagWithPrompts>(`/api/tags/${id}`, {
+        method: "PATCH",
+        body: json(patch),
+      }),
+    delete: (id: string) =>
+      request<{ ok: true }>(`/api/tags/${id}`, { method: "DELETE" }),
+    setPrompts: (id: string, promptIds: string[]) =>
+      request<TagWithPrompts>(`/api/tags/${id}/prompts`, {
+        method: "PUT",
+        body: json({ prompt_ids: promptIds }),
+      }),
+    addPrompt: (id: string, promptId: string) =>
+      request<TagWithPrompts>(`/api/tags/${id}/prompts`, {
+        method: "POST",
+        body: json({ prompt_id: promptId }),
+      }),
+    removePrompt: (id: string, promptId: string) =>
+      request<TagWithPrompts>(`/api/tags/${id}/prompts/${promptId}`, {
+        method: "DELETE",
+      }),
+    /** One row per prompt, with the prompt's full tag set. Drives the
+     *  per-row tag chips in the prompts sidebar. */
+    byPrompt: () => request<PromptWithTags[]>("/api/tags/by-prompt"),
   },
   skills: primitiveResource<Skill>("/api/skills"),
   mcp_tools: primitiveResource<McpTool>("/api/mcp_tools"),

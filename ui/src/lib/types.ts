@@ -166,6 +166,32 @@ export interface PromptGroupWithPrompts extends PromptGroup {
   prompts: PromptInGroup[];
 }
 
+export interface Tag {
+  id: string;
+  name: string;
+  color: string | null;
+  created_at: number;
+  updated_at: number;
+  prompt_count: number;
+}
+
+export interface PromptInTag {
+  id: string;
+  name: string;
+  color: string | null;
+}
+
+export interface TagWithPrompts extends Tag {
+  prompts: PromptInTag[];
+}
+
+/** One row per prompt with the prompt's full tag set, returned by
+ *  `GET /api/prompts/with-tags` for the prompts sidebar chip render. */
+export interface PromptWithTags {
+  prompt_id: string;
+  tags: Tag[];
+}
+
 export type PromptOrigin =
   | "direct"
   | "role"
@@ -380,6 +406,13 @@ export type ServerEvent =
   | { type: "prompt_group.updated"; data: { groupId: string; group: PromptGroup } }
   | { type: "prompt_group.deleted"; data: { groupId: string } }
   | { type: "prompt_group.reordered"; data: { ids: string[] } }
+  | { type: "tag.created"; data: { tagId: string; tag: Tag } }
+  | { type: "tag.updated"; data: { tagId: string; tag: Tag } }
+  | { type: "tag.deleted"; data: { tagId: string } }
+  | {
+      type: "prompt.tags_changed";
+      data: { promptId: string; tagIds: string[] };
+    }
   | {
       type: "data.imported";
       data: {

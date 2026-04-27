@@ -55,6 +55,14 @@ describe("tools registry", () => {
       "create_prompt",
       "update_prompt",
       "delete_prompt",
+      "list_tags",
+      "get_tag",
+      "create_tag",
+      "update_tag",
+      "delete_tag",
+      "set_tag_prompts",
+      "add_prompt_to_tag",
+      "remove_prompt_from_tag",
       "get_ui_info",
       "open_promptery_ui",
     ]) {
@@ -489,6 +497,112 @@ describe("search_tasks / list_all_tasks / get_task across multiple boards", () =
       query: `${fx.ns}-token-that-matches-nothing-zzzz`,
     });
     expect(hits).toEqual([]);
+  });
+});
+
+describe("tags via hub", () => {
+  // Each test creates uniquely-named entities to keep the shared hub from
+  // bleeding state across cases — `list_tags` is global.
+
+  it("create_tag → minimal {id,name}; get_tag exposes prompt_ids", async () => {
+    const prompt = (await call<{ id: string }>("create_prompt", {
+      name: `tag-hub-p-${Date.now()}`,
+    })) as { id: string };
+    const tag = (await call<{ id: string; name: string }>("create_tag", {
+      name: `tag-hub-${Date.now()}`,
+      prompt_ids: [prompt.id],
+    })) as { id: string; name: string };
+    expect(tag.id).toBeTruthy();
+    expect(tag.name.startsWith("tag-hub-")).toBe(true);
+    // Confirmation envelope: id + minimal changed fields only.
+    expect((tag as Record<string, unknown>).color).toBeUndefined();
+    expect((tag as Record<string, unknown>).prompt_count).toBeUndefined();
+
+    const detail = await call<{
+      id: string;
+      name: string;
+      prompt_ids: string[];
+    }>("get_tag", { id: tag.id });
+    expect(detail.id).toBe(tag.id);
+    expect(detail.prompt_ids).toEqual([prompt.id]);
+  });
+
+  it("update_tag renames; delete_tag removes", async () => {
+    const tag = (await call<{ id: string }>("create_tag", {
+      name: `tag-hub-rename-${Date.now()}`,
+    })) as { id: string };
+    const renamed = (await call<{ id: string }>("update_tag", {
+      id: tag.id,
+      name: `tag-hub-renamed-${Date.now()}`,
+    })) as { id: string };
+    expect(renamed.id).toBe(tag.id);
+
+    const removed = (await call<{ id: string; deleted: boolean }>(
+      "delete_tag",
+      { id: tag.id }
+    )) as { id: string; deleted: boolean };
+    expect(removed).toEqual({ id: tag.id, deleted: true });
+  });
+
+  it("set_tag_prompts replaces membership; add/remove are pointwise", async () => {
+    const stamp = Date.now();
+    const p1 = (await call<{ id: string }>("create_prompt", {
+      name: `tag-hub-p1-${stamp}`,
+    })) as { id: string };
+    const p2 = (await call<{ id: string }>("create_prompt", {
+      name: `tag-hub-p2-${stamp}`,
+    })) as { id: string };
+    const p3 = (await call<{ id: string }>("create_prompt", {
+      name: `tag-hub-p3-${stamp}`,
+    })) as { id: string };
+
+    const tag = (await call<{ id: string }>("create_tag", {
+      name: `tag-hub-set-${stamp}`,
+      prompt_ids: [p1.id],
+    })) as { id: string };
+
+    await call("set_tag_prompts", {
+      tag_id: tag.id,
+      prompt_ids: [p2.id, p3.id],
+    });
+    const afterSet = await call<{ prompt_ids: string[] }>("get_tag", {
+      id: tag.id,
+    });
+    expect(afterSet.prompt_ids.sort()).toEqual([p2.id, p3.id].sort());
+
+    await call("add_prompt_to_tag", { tag_id: tag.id, prompt_id: p1.id });
+    const afterAdd = await call<{ prompt_ids: string[] }>("get_tag", {
+      id: tag.id,
+    });
+    expect(afterAdd.prompt_ids.sort()).toEqual([p1.id, p2.id, p3.id].sort());
+
+    await call("remove_prompt_from_tag", {
+      tag_id: tag.id,
+      prompt_id: p2.id,
+    });
+    const afterRemove = await call<{ prompt_ids: string[] }>("get_tag", {
+      id: tag.id,
+    });
+    expect(afterRemove.prompt_ids.sort()).toEqual([p1.id, p3.id].sort());
+  });
+
+  it("list_tags returns the freshly-created tag in minimal shape", async () => {
+    const stamp = Date.now();
+    const created = (await call<{ id: string }>("create_tag", {
+      name: `tag-hub-list-${stamp}`,
+      color: "#aabbcc",
+    })) as { id: string };
+
+    const tags = await call<
+      Array<{ id: string; name: string; color: string | null; prompt_count: number }>
+    >("list_tags", {});
+    const mine = tags.find((t) => t.id === created.id);
+    expect(mine).toBeTruthy();
+    expect(mine!.name.startsWith("tag-hub-list-")).toBe(true);
+    expect(mine!.color).toBe("#aabbcc");
+    expect(mine!.prompt_count).toBe(0);
+    // Minimal-shape contract: no created_at / updated_at on list.
+    expect((mine as Record<string, unknown>).created_at).toBeUndefined();
   });
 });
 

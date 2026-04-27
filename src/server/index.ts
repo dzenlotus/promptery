@@ -14,6 +14,7 @@ import rolesRoute from "./routes/roles.js";
 import bridgesRoute from "./routes/bridges.js";
 import settingsRoute from "./routes/settings.js";
 import promptGroupsRoute from "./routes/promptGroups.js";
+import tagsRoute from "./routes/tags.js";
 import metaRoute from "./routes/meta.js";
 import { createDataRouter } from "./routes/data.js";
 import { errorHandler } from "./middleware/error.js";
@@ -42,6 +43,7 @@ export function createApp() {
   app.route("/api/bridges", bridgesRoute);
   app.route("/api/settings", settingsRoute);
   app.route("/api/prompt-groups", promptGroupsRoute);
+  app.route("/api/tags", tagsRoute);
   app.route("/api/meta", metaRoute);
   app.route("/api/data", createDataRouter(getAppVersion()));
 
