@@ -4,11 +4,14 @@
   "description": "Kanban-based context management for AI agents via MCP",
   "keywords": [
     "mcp",
-    "ai-agents",
     "kanban",
-    "prompt-management",
     "claude",
     "cursor",
+    "prompt-engineering",
+    "agents",
+    "orchestration",
+    "ai-agents",
+    "prompt-management",
     "context-management"
   ],
   "license": "Elastic-2.0",
@@ -28,7 +31,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/dzenlotus/promptery.git"
+    "url": "git+https://github.com/dzenlotus/promptery.git"
   },
   "bugs": {
     "url": "https://github.com/dzenlotus/promptery/issues"

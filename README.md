@@ -1,248 +1,205 @@
 # Promptery
 
-> Context orchestration for AI agents — a kanban board with MCP integration.
+> MCP-native kanban for orchestrating AI coding agents.
 
-Build a library of reusable agent personas (roles + prompts) and apply them to tasks on a kanban board. Agents connect via the Model Context Protocol (MCP) and receive structured context for every task they work on.
+[![npm version](https://img.shields.io/npm/v/@dzenlotus/promptery)](https://www.npmjs.com/package/@dzenlotus/promptery)
+[![license](https://img.shields.io/badge/license-Elastic--2.0-blue)](./LICENSE)
+[![node](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org)
 
-## What's new in 0.3.0
+Promptery is a local-first tool that gives AI coding agents structured context via the [Model Context Protocol](https://modelcontextprotocol.io). Build a library of reusable roles and prompts, organise work on a kanban board, and let every connected agent — Claude Desktop, Cursor, Codex, and others — read and update the same board in real time. All data stays on your machine in a SQLite file; no cloud, no telemetry.
 
-- **Spaces** — workspace organisation layer above boards. Each space carries a slug `prefix` (e.g. `pmt`) used to mint task slugs (`pmt-46`). Boards live inside spaces; one default space is system-managed and pinned at the bottom of the sidebar as plain "Boards".
-- **Task slugs replace per-board numbers** — `task.number` is gone; every task carries a globally unique `slug` like `pmt-46` derived from its space's prefix. Slugs may change when a board moves between spaces (re-slugged automatically); the internal `id` is the stable identifier — agents are encouraged to persist ids, not slugs.
-- **Drag-and-drop sidebar** — reorder spaces, reorder boards within a space, drag boards between spaces. Cross-space drops re-slug every task on the moved board to the destination prefix.
-- **`/t/<id>` and `/b/<id>` URLs** — short URL scheme matching `/s/<id>` for spaces. The `/t/` route accepts either a slug or an internal id and resolves to the task's board.
-- **Slug exact match in search** — `search_tasks("pmt-46")` returns the slug-carrying task as the top result with `match_type: "exact"`, regardless of FTS rank. Other hits carry `match_type: "fts"`.
-- **Minimal MCP responses** — every MCP write tool now returns `{id, ...minimal_changed_fields}` (50–200 bytes); every read tool except `get_task_bundle` strips `description` / role content / full prompt content from the payload. Use `get_task_bundle` (XML for system prompt) or `get_prompt(id)` (full prompt content) when you actually need the heavy fields.
-- **Pre-migration safety net** — destructive migrations (`009_spaces`, `010_board_position`) now snapshot the DB to `~/.promptery/backups/db-pre-<name>-<ts>.sqlite` before applying, alongside the existing daily auto-backup.
+---
 
-**Breaking changes from 0.2.x:**
-- `tasks.number` is removed from the schema, the API, and MCP responses. Use `tasks.slug`.
-- MCP read/write response shapes are minimal by default. Tools that previously returned full entities now return navigation data only — code that reaches into `description` / `role.prompts` etc. on MCP responses needs to call `get_task_bundle` or `get_prompt` instead.
-- HTTP API responses are unchanged (UI depends on full shapes).
-- Existing DBs migrate automatically: tasks get `pmt-N` slugs if their boards' names start with "Promptery", `task-N` otherwise.
+## Screenshots
 
-See [CHANGELOG.md](./CHANGELOG.md) for the full list.
+| Kanban board | Task dialog |
+|---|---|
+| ![Kanban board](docs/screenshots/kanban.png) | ![Task dialog](docs/screenshots/task-dialog.png) |
+
+> See [`docs/screenshots/README.md`](docs/screenshots/README.md) for the full list of screenshot placeholders.
+
+---
 
 ## Quick start
 
-Install Promptery into all your AI clients at once:
+### 1. Start the server
+
+```bash
+npx @dzenlotus/promptery server
+```
+
+Opens the kanban UI at `http://localhost:4321`.
+
+### 2. Connect your AI client
+
+**Claude Desktop** — add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "promptery": {
+      "command": "npx",
+      "args": ["-y", "@dzenlotus/promptery", "bridge"]
+    }
+  }
+}
+```
+
+**Cursor** — add to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project):
+
+```json
+{
+  "mcpServers": {
+    "promptery": {
+      "command": "npx",
+      "args": ["-y", "@dzenlotus/promptery", "bridge"]
+    }
+  }
+}
+```
+
+Or use the one-shot auto-installer:
 
 ```bash
 npx -y @dzenlotus/promptery install
 ```
 
-This auto-detects which AI clients you have installed and adds Promptery to each one. Then restart your clients.
+This detects which AI clients are installed and configures each one. Restart your clients afterwards.
 
-## Install into a specific client
+### Install into a specific client
 
 ```bash
-# Claude Desktop
 npx -y @dzenlotus/promptery install-claude-desktop
-
-# Claude Code
 npx -y @dzenlotus/promptery install-claude-code
-
-# Cursor (global — applies to all projects)
-npx -y @dzenlotus/promptery install-cursor
-
-# Cursor (current project only)
-npx -y @dzenlotus/promptery install-cursor --scope project
-
-# OpenAI Codex CLI
+npx -y @dzenlotus/promptery install-cursor [--scope project]
 npx -y @dzenlotus/promptery install-codex
-
-# Qwen Code
 npx -y @dzenlotus/promptery install-qwen
-
-# GigaCode
 npx -y @dzenlotus/promptery install-gigacode
 ```
 
-## Check installation status
+### Check installation status
 
 ```bash
 npx -y @dzenlotus/promptery status
 ```
 
-Shows which supported clients are detected and where Promptery is currently installed.
+---
 
-## Uninstall
+## Feature highlights
 
-```bash
-# Remove from a specific client
-npx -y @dzenlotus/promptery uninstall-claude-desktop
-# ...also uninstall-claude-code, uninstall-cursor, uninstall-codex,
-#        uninstall-qwen, uninstall-gigacode
+- **Spaces** — isolate projects into separate workspaces with independent boards and slug namespaces.
+- **Kanban** — boards, drag-and-drop columns, tasks with slugs (e.g. `WEB-42`) for stable cross-space references.
+- **Inheritance resolver** — roles and prompts cascade through board → column → task with a six-origin deduplication ladder. The most specific origin always wins.
+- **Prompt groups** — organise your prompt library into folders. Many-to-many: one prompt can live in multiple groups.
+- **Tags** — apply filterable tags to prompts.
+- **Task slugs** — human-readable IDs (`SPACE-N`) that survive moves and are stable across agent sessions.
+- **Search** — full-text search across all tasks via SQLite FTS5, with ranking that weights title hits above body hits.
+- **Undo / redo** — `Cmd+Z` / `Cmd+Shift+Z` for destructive UI actions.
+- **Token counts** — tiktoken-based counts shown on prompts, groups, roles, and task bundles.
+- **Attachments** — prompt groups collapse into a single chip when fully covered, keeping headers readable.
+- **Activity log** — per-task event timeline showing every state change.
+- **Per-task prompt overrides** — disable inherited prompts on individual tasks without touching the board or column.
+- **Agent reports** — agents can write structured output back to tasks via MCP tools.
 
-# Remove from every detected client
-npx -y @dzenlotus/promptery uninstall-all
-```
+---
 
-## Run the UI standalone
+## Architecture
 
-```bash
-npx -y @dzenlotus/promptery hub
-```
+Promptery runs two processes side by side. The **hub** is a long-running Node server that owns the SQLite database, HTTP API, WebSocket broadcast channel, and the React kanban UI. It starts automatically when the first agent connects, or you can start it explicitly with `promptery start`. The **bridge** is a tiny stdio MCP server that each AI client spawns as a subprocess; multiple bridges all talk to the same hub, so every connected agent shares one board in real time.
 
-Opens the kanban board at `http://localhost:4321` (or the next free port).
+Data is stored locally in `~/.promptery/db.sqlite`. Hub state (port, PID) is tracked in `~/.promptery/hub.lock`. On every startup the hub creates a daily SQLite `VACUUM INTO` backup; backups older than 30 days are pruned automatically. You can also trigger manual backups and restore them from the CLI or from Settings → Data in the UI.
 
-## How it works
-
-Promptery has two processes that run together:
-
-**Hub** — a long-running process that holds the SQLite database, HTTP API, WebSocket for live UI updates, and the web kanban UI. Started automatically when the first agent connects.
-
-**Bridge** — a lightweight stdio MCP server that each AI client spawns. Multiple bridges talk to the same hub, so all your agents share the same board in real time.
-
-You can open Claude Desktop, Cursor, and Codex simultaneously — all three agents see and modify the same board.
-
-## Concepts
-
-- **Spaces** — workspace organisation layer. Boards live inside spaces; each space has a `prefix` (1–10 lowercase letters/digits/hyphens) that becomes the slug prefix for tasks created on its boards. One default space is system-managed (prefix `task`) and shows up at the bottom of the sidebar as plain "Boards".
-- **Prompts** — reusable instruction snippets like "always write comments in English" or "avoid `any` in TypeScript"
-- **Prompt groups** — folders that organise related prompts. A prompt can belong to multiple groups simultaneously; it's never duplicated by group membership
-- **Roles** — composable agent personas. A role has its own markdown description and a set of default prompts (e.g. "React Performance Specialist" with prompts for memoization and bundle analysis)
-- **Boards** — project-level containers. A board can define a default role and default prompts that every task on it inherits. Boards belong to exactly one space.
-- **Columns** — workflow stages within a board. A column can override the board's role and add its own prompts — e.g. a "Review" column that switches every task to a "Code Reviewer" role automatically
-- **Tasks** — work items. Each task has a stable internal `id` and a human-friendly `slug` (`pmt-46`) derived from its board's space prefix. Slugs are mutable across `move_board_to_space`; ids are not.
-- **Context bundle** — when an agent calls `get_task_bundle(id_or_slug)`, Promptery resolves the full context (inherited role + the deduplicated prompt union from all six origins) and returns it as XML ready to paste into agent instructions. Accepts both slugs and internal ids.
-
-## Inheritance model
-
-**Active role**: priority `task > column > board`. The most specific non-null role wins.
-
-**Prompts**: union from six origins, deduplicated by `prompt_id` with specificity priority:
-
-1. Direct on the task
-2. The active role's prompts
-3. Column direct prompts
-4. Column role's prompts (if different from the active role)
-5. Board direct prompts
-6. Board role's prompts (if different from active and column roles)
-
-When the same prompt arrives from multiple layers, only the most specific origin is kept. The `get_task_bundle` XML output keeps prompts grouped under `<role>` / `<task>` / `<inherited>` so the agent can tell "who I am" from "what I'm doing here" from "workspace-wide context".
+---
 
 ## MCP tools exposed to agents
 
-**Spaces** *(new in 0.3.0)*: list, get, create, update, delete, **move_board_to_space**
-**Boards**: list, get, create *(takes optional `space_id`)*, update, delete, **set_role**, **set_prompts**, **get_prompts**
-**Columns**: list, create, update, delete, **set_role**, **set_prompts**, **get_prompts**
-**Tasks**: list, get, **get_task_bundle** *(accepts slug or id)*, **get_task_context**, create *(returns slug)*, update, move, delete, set_role, add_prompt, remove_prompt
-**Roles**: list, get, create, update, delete, set_prompts
-**Prompts**: list, get, create, update, delete
-**Prompt groups**: list, get, create, update, delete, **set_group_prompts**, **add_prompt_to_group**, **remove_prompt_from_group**, **reorder_prompt_groups**
-**UI**: get_ui_info, open_promptery_ui
+| Domain | Tools |
+|---|---|
+| Boards | `list_boards`, `get_board`, `create_board`, `update_board`, `delete_board`, `set_board_role`, `set_board_prompts`, `get_board_prompts` |
+| Columns | `list_columns`, `create_column`, `update_column`, `delete_column`, `set_column_role`, `set_column_prompts`, `get_column_prompts` |
+| Tasks | `list_tasks`, `list_all_tasks`, `get_task`, `get_task_bundle`, `get_task_context`, `create_task`, `update_task`, `move_task`, `delete_task`, `set_task_role`, `add_task_prompt`, `remove_task_prompt`, `search_tasks` |
+| Roles | `list_roles`, `get_role`, `create_role`, `update_role`, `delete_role`, `set_role_prompts` |
+| Prompts | `list_prompts`, `get_prompt`, `create_prompt`, `update_prompt`, `delete_prompt` |
+| Prompt groups | `list_prompt_groups`, `get_prompt_group`, `create_prompt_group`, `update_prompt_group`, `delete_prompt_group`, `set_group_prompts`, `add_prompt_to_group`, `remove_prompt_from_group`, `reorder_prompt_groups` |
+| UI | `get_ui_info`, `open_promptery_ui` |
 
-### Response shapes (0.3.0)
-
-All MCP write tools return a minimal confirmation envelope (`{id, ...changed}`, 50–200 bytes). All MCP read tools except `get_task_bundle` and `get_prompt` return navigation data only — no description, no full role/prompt content. The two heavy entry points by design:
-
-- `get_task_bundle(id_or_slug)` — full agent context as XML, ready to paste into a system prompt.
-- `get_prompt(id)` — single prompt's full content body.
-
-The HTTP API at `/api/...` is unchanged from 0.2.x — UI clients still get full entities for optimistic updates. Only the MCP bridge layer projects to minimal shapes.
-
-### Slug vs id
-
-Tasks carry a `slug` (e.g. `pmt-46`) for human-readable conversation and an `id` (CUID) for stable references. Use `slug` when chatting about a task; use `id` for any reference you'll persist (storing a task pointer in another task's description, linking from a chat log, etc.). Slugs change when a board is moved between spaces; ids never do.
+---
 
 ## Managing your data
 
-All data lives locally in `~/.promptery/db.sqlite`. No cloud, no telemetry.
+All data lives locally in `~/.promptery/db.sqlite`.
 
-### Automatic backups
-
-On every hub startup, Promptery checks whether today's automatic backup exists. If not, it creates one via SQLite `VACUUM INTO` (safe even on a database that's in use). Auto-backups older than 30 days are pruned on the next start.
-
-Destructive schema migrations (currently `009_spaces` and `010_board_position`) take a separate snapshot to `~/.promptery/backups/db-pre-<name>-<ts>.sqlite` immediately before they apply, so an upgrade can always be rolled back via `promptery restore`.
-
-### Manual backups via CLI
+### Backups
 
 ```bash
-promptery backup                    # timestamped backup
-promptery backup --name pre-refactor
-promptery backups                   # list all backups
+promptery backup                          # timestamped snapshot
+promptery backup --name pre-refactor      # named snapshot
+promptery backups                         # list all backups
 promptery restore db-auto-20260423-140000.sqlite
 promptery backup-delete <filename>
 ```
 
-Restore requires the hub to be stopped first (`promptery stop`). A safety backup of the current database is written to the backups directory before the restore overwrites it.
+Restore requires the hub to be stopped first (`promptery stop`). A safety backup is written automatically before the restore overwrites the database.
 
 ### Export / import
 
 Use **Settings → Data** in the UI to export specific scopes (boards / roles / prompts / settings) as JSON, then import them on another machine. Conflicts can be resolved by skipping existing rows or importing them under `(imported)` suffixes.
 
+---
+
 ## Supported AI clients
 
-| Client           | Config format | Install command           |
-| ---------------- | ------------- | ------------------------- |
-| Claude Desktop   | JSON          | `install-claude-desktop`  |
-| Claude Code      | JSON          | `install-claude-code`     |
-| Cursor           | JSON          | `install-cursor`          |
-| OpenAI Codex CLI | TOML          | `install-codex`           |
-| Qwen Code        | JSON          | `install-qwen`            |
-| GigaCode         | JSON          | `install-gigacode`        |
+| Client | Install command |
+|---|---|
+| Claude Desktop | `install-claude-desktop` |
+| Claude Code | `install-claude-code` |
+| Cursor | `install-cursor` |
+| OpenAI Codex CLI | `install-codex` |
+| Qwen Code | `install-qwen` |
+| GigaCode | `install-gigacode` |
 
-## Notes
-
-**Codex and comments.** When the installer updates Codex's `~/.codex/config.toml`, comments will be stripped — this is a limitation of the underlying TOML library. Keep a backup if you rely on comments.
-
-**Qwen / GigaCode settings.** The installer preserves all other keys in `settings.json`; only the `mcpServers` section is modified.
+---
 
 ## Troubleshooting
 
-If an agent doesn't see Promptery's tools after install:
+**Agent does not see Promptery tools after install:**
 
 1. Fully quit and restart the client (not just close the window).
-2. Run `promptery status` to verify that the config was written.
+2. Run `promptery status` to verify the config was written.
 3. Check the client's own MCP log files (path varies by client).
 4. Try manual installation by opening the config file shown in `status` output.
 
-### MCP server not connecting (nvm / fnm / volta / asdf users)
+**MCP server not connecting on nvm / fnm / volta / asdf systems:**
 
-If your Node is managed via nvm, fnm, volta, or asdf and the MCP server
-doesn't start in Claude Desktop / Claude Code, re-run the installer:
+GUI apps do not inherit shell PATH. The installer writes an absolute path to `npx` in the client config. Re-run the install command after switching Node versions:
 
 ```bash
 npx -y @dzenlotus/promptery@latest install-claude-code
 ```
 
-GUI apps don't inherit shell PATH, so a bare `npx` can't be resolved. The
-installer writes the absolute path to `npx` into the client config so the
-host can spawn it directly. When you switch Node versions later, re-run
-the install command to refresh the path.
+**Port conflicts:**
 
-### Hub management
+Promptery tries port `4321` by default and falls back to the next free port. Check `~/.promptery/hub.lock` or `promptery status` for the actual port.
 
-```bash
-promptery status      # where Promptery is installed, per client
-promptery start       # foreground hub with banner (Ctrl+C to stop)
-promptery stop        # SIGTERM with SIGKILL fallback
-```
+---
 
-The hub auto-starts when any bridge needs it (e.g. when Claude Desktop
-connects), so explicit `start` is only needed for dev or pre-warming.
+## Links
 
-### Port conflicts
+- [Changelog](./CHANGELOG.md)
+- [Contributing](./CONTRIBUTING.md)
+- [Issues](https://github.com/dzenlotus/promptery/issues)
+- [License](./LICENSE)
 
-By default Promptery tries port `4321` and falls back to the next free
-port in range. Check `~/.promptery/hub.lock` or `promptery status` output
-for the actual port in use.
-
-## Status
-
-Early-stage personal tool. Rough edges expected. Feedback welcome via GitHub issues.
+---
 
 ## License
 
 Promptery is licensed under the [Elastic License 2.0](./LICENSE).
 
-In short:
-- ✅ Use it for yourself or your team, free of charge
-- ✅ Modify it, fork it, use it inside your company
-- ✅ Self-host it for internal use
-- ❌ Don't resell it as a hosted/managed service to third parties
-- ❌ Don't remove copyright notices or circumvent license keys
-
-For full terms see [LICENSE](./LICENSE).
+- Use it for yourself or your team, free of charge.
+- Modify it, fork it, use it inside your company.
+- Self-host it for internal use.
+- Do not resell it as a hosted or managed service to third parties.
+- Do not remove copyright notices or circumvent license keys.
 
 Copyright © 2026 dzenlotus
